@@ -1,6 +1,6 @@
 class GameObject {
   public id: string;
-  public speed = 0;
+  public speed = 10;
 
   constructor(
     public x: number,
@@ -24,7 +24,10 @@ class Game {
   player: Player;
   gameObjects: GameObject[] = [];
   input: input = {};
+  inputId = 0;
   conn: WebSocket;
+  updateRate = 30;
+  last_ts: number;
 
   start() {
     this.conn = new WebSocket("ws://192.168.55.28:3000/connectplayer");
@@ -33,22 +36,22 @@ class Game {
       for (const player of players) {
         const data = player.split(",");
         if (data[0] === this.player.id) {
-          this.player.x = parseInt(data[1]);
-          this.player.y = parseInt(data[2]);
+          this.player.x = parseFloat(data[1]);
+          this.player.y = parseFloat(data[2]);
         } else {
           let found = false;
           for (const obj of this.gameObjects) {
             if (data[0] === obj.id) {
               found = true;
-              obj.x = parseInt(data[1]);
-              obj.y = parseInt(data[2]);
+              obj.x = parseFloat(data[1]);
+              obj.y = parseFloat(data[2]);
             }
           }
 
           if (!found) {
             const newObj = new GameObject(
-              parseInt(data[1]),
-              parseInt(data[2]),
+              parseFloat(data[1]),
+              parseFloat(data[2]),
               30,
               30,
               "green",
@@ -76,30 +79,46 @@ class Game {
       // evt.preventDefault();
       this.input[evt.key.toLowerCase()] = evt.type == "keydown";
     };
+
+    setInterval(() => this.update(), 1000 / this.updateRate);
   }
 
   update() {
-    this.clear();
+    const now_ts = +new Date();
+    const last_ts = this.last_ts || now_ts;
+    const dt_sec = (now_ts - last_ts) / 1000;
+    this.last_ts = now_ts;
 
+    this.clear();
     let key = "";
     if (this.input.w) key += "w";
     if (this.input.s) key += "s";
     if (this.input.a) key += "a";
     if (this.input.d) key += "d";
-    this.conn.send(key);
+
+    if (key != "") {
+      this.conn.send(
+        JSON.stringify({
+          id: this.inputId,
+          k: key,
+          dt: dt_sec,
+        }),
+      );
+
+      this.inputId++;
+    }
 
     this.gameObjects.forEach((c) => c.update(this.ctx));
     this.player.update(this.ctx);
   }
 
   clear() {
-    console.log(this.gameObjects);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 }
 
 class Player extends GameObject {
-  speed: number = 10;
+  speed: number = 200;
 
   update(ctx: CanvasRenderingContext2D): void {
     super.update(ctx);
@@ -113,5 +132,4 @@ window.onload = function () {
   game.player.id = "p";
 
   game.start();
-  setInterval(() => game.update(), 20);
 };

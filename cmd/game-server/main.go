@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -8,13 +9,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	UpdatesPerSec int = 30
+)
+
 type player struct {
 	id    string
-	x     int
-	y     int
-	speed int
-	input string
+	x     float64
+	y     float64
+	speed float64
+	input []Input
 	send  chan<- message
+}
+
+type Input struct {
+	Key       string  `json:"k"`
+	DeltaTime float64 `json:"dt"`
 }
 
 type actionType = int
@@ -42,8 +52,9 @@ type PlayerDisconnectedData struct {
 }
 
 type NewInputData struct {
-	playerId string
-	input    string
+	Input
+	Id       int    `json:"id"`
+	PlayerId string `json:"-"`
 }
 
 func main() {
@@ -104,11 +115,16 @@ func main() {
 				break
 			}
 
+			input := NewInputData{}
+			err = json.Unmarshal(p, &input)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			input.PlayerId = playerId
+
 			actionChan <- action{
-				Type: NewInput, Data: NewInputData{
-					playerId: playerId,
-					input:    string(p),
-				},
+				Type: NewInput, Data: input,
 			}
 		}
 
@@ -127,56 +143,55 @@ func main() {
 		players := make(map[string]*player)
 		var playerCounter int
 
-		ticker := time.NewTicker(20 * time.Millisecond)
+		ticker := time.NewTicker(time.Second / time.Duration(UpdatesPerSec))
 
 		for {
-			fmt.Println("Waiting")
 			select {
 			case action := <-actionChan:
 				switch data := action.Data.(type) {
 				case CreatePlayerData:
-					fmt.Println("creating new player")
 					id := fmt.Sprintf("player%d", playerCounter)
-					player := &player{id, 30, 30, 10, "", data.send}
+					player := &player{id, 30, 30, 200, []Input{}, data.send}
 					players[id] = player
 					playerCounter++
-
-					fmt.Println("Sending info")
 					data.info <- id
-
-					fmt.Println("new player: " + id)
 				case PlayerDisconnectedData:
 					delete(players, data.playerId)
-					fmt.Println("player left: " + data.playerId)
 				case NewInputData:
-					fmt.Println("new input")
-					players[data.playerId].input = data.input
+					players[data.PlayerId].input = append(players[data.PlayerId].input, data.Input)
 				}
 			case <-ticker.C:
-				fmt.Println("tick")
 				msg := ""
 				for _, player := range players {
-					for _, d := range player.input {
-						switch d {
-						case 'w':
-							player.y -= player.speed
-						case 's':
-							player.y += player.speed
-						case 'a':
-							player.x -= player.speed
-						case 'd':
-							player.x += player.speed
-						}
-					}
+					if len(player.input) > 0 {
+						input := player.input[0]
+						player.input = player.input[1:]
+						distance := input.DeltaTime * player.speed
 
-					if msg != "" {
-						msg += "|"
+						for _, d := range input.Key {
+							switch d {
+							case 'w':
+								player.y -= distance
+							case 's':
+								player.y += distance
+							case 'a':
+								player.x -= distance
+							case 'd':
+								player.x += distance
+							}
+						}
+
+						if msg != "" {
+							msg += "|"
+						}
+						msg += fmt.Sprintf("%s,%f,%f", player.id, player.x, player.y)
 					}
-					msg += fmt.Sprintf("%s,%d,%d", player.id, player.x, player.y)
 				}
 
-				for _, player := range players {
-					player.send <- msg
+				if msg != "" {
+					for _, player := range players {
+						player.send <- msg
+					}
 				}
 			}
 		}
