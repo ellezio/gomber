@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -14,15 +15,15 @@ const (
 )
 
 type player struct {
-	id    string
-	x     float64
-	y     float64
-	speed float64
-	input []Input
-	send  chan<- message
+	X     float64        `json:"x"`
+	Y     float64        `json:"y"`
+	Speed float64        `json:"speed"`
+	input []Input        `json:"-"`
+	send  chan<- message `json:"-"`
 }
 
 type Input struct {
+	Id        int     `json:"id"`
 	Key       string  `json:"k"`
 	DeltaTime float64 `json:"dt"`
 }
@@ -40,11 +41,11 @@ type action struct {
 	Data any
 }
 
-type message = string
+type message = []byte
 
 type CreatePlayerData struct {
-	send chan<- message
-	info chan<- string
+	send   chan<- message
+	sendId chan<- string
 }
 
 type PlayerDisconnectedData struct {
@@ -53,7 +54,6 @@ type PlayerDisconnectedData struct {
 
 type NewInputData struct {
 	Input
-	Id       int    `json:"id"`
 	PlayerId string `json:"-"`
 }
 
@@ -68,45 +68,37 @@ func main() {
 	http.Handle("/dist/", http.StripPrefix("/dist/", http.FileServer(http.Dir("web/dist"))))
 
 	http.HandleFunc("/connectplayer", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Conn")
 		upgrader := websocket.Upgrader{}
 		upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-		fmt.Println("Upgreading")
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println("Upgreaded")
 
-		writeChan := make(chan string)
-		infoChan := make(chan string)
+		writeChan := make(chan message)
+		idChan := make(chan string)
 		done := make(chan bool)
-
-		fmt.Println("request new player")
-		actionChan <- action{
-			Type: CreatePlayer,
-			Data: CreatePlayerData{
-				send: writeChan,
-				info: infoChan,
-			},
-		}
-		fmt.Println("player created")
-
-		fmt.Println("request player id")
-		playerId := <-infoChan
-		fmt.Println("got id: " + playerId)
 
 		go func() {
 			for {
 				select {
 				case <-done:
 					return
-				case msg := <-writeChan:
-					conn.WriteMessage(websocket.TextMessage, []byte(msg))
+				case data := <-writeChan:
+					conn.WriteMessage(websocket.TextMessage, data)
 				}
 			}
 		}()
+
+		actionChan <- action{
+			Type: CreatePlayer,
+			Data: CreatePlayerData{
+				send:   writeChan,
+				sendId: idChan,
+			},
+		}
+		playerId := <-idChan
 
 		for {
 			_, p, err := conn.ReadMessage()
@@ -150,47 +142,61 @@ func main() {
 			case action := <-actionChan:
 				switch data := action.Data.(type) {
 				case CreatePlayerData:
+					type initData struct {
+						*player
+						Kind string `json:"type"`
+					}
 					id := fmt.Sprintf("player%d", playerCounter)
-					player := &player{id, 30, 30, 200, []Input{}, data.send}
+					player := &player{30, 30, 200, []Input{}, data.send}
 					players[id] = player
 					playerCounter++
-					data.info <- id
+					data.sendId <- id
+
+					tmpMap := make(map[string]*initData)
+					tmpMap[id] = &initData{player, "init"}
+					jsonPlayer, err := json.Marshal(tmpMap)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+
+					data.send <- jsonPlayer
 				case PlayerDisconnectedData:
 					delete(players, data.playerId)
 				case NewInputData:
 					players[data.PlayerId].input = append(players[data.PlayerId].input, data.Input)
 				}
 			case <-ticker.C:
-				msg := ""
+				update := false
 				for _, player := range players {
 					if len(player.input) > 0 {
+						update = true
 						input := player.input[0]
 						player.input = player.input[1:]
-						distance := input.DeltaTime * player.speed
+						distance := input.DeltaTime * player.Speed
 
 						for _, d := range input.Key {
 							switch d {
 							case 'w':
-								player.y -= distance
+								player.Y = toFixed(player.Y-distance, 4)
 							case 's':
-								player.y += distance
+								player.Y = toFixed(player.Y+distance, 4)
 							case 'a':
-								player.x -= distance
+								player.X = toFixed(player.X-distance, 4)
 							case 'd':
-								player.x += distance
+								player.X = toFixed(player.X+distance, 4)
 							}
 						}
-
-						if msg != "" {
-							msg += "|"
-						}
-						msg += fmt.Sprintf("%s,%f,%f", player.id, player.x, player.y)
 					}
 				}
 
-				if msg != "" {
-					for _, player := range players {
-						player.send <- msg
+				if update {
+					if playersData, err := json.Marshal(players); err == nil {
+						for _, player := range players {
+							player.send <- playersData
+						}
+					} else {
+						fmt.Println(err)
 					}
 				}
 			}
@@ -199,4 +205,9 @@ func main() {
 
 	fmt.Println("Listening on :3000")
 	http.ListenAndServe(":3000", nil)
+}
+
+func toFixed(num float64, precision int) float64 {
+	ratio := math.Pow10(precision)
+	return math.Round(num*ratio) / ratio
 }

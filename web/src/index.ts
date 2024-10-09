@@ -16,47 +16,83 @@ class GameObject {
   }
 }
 
-type input = { [key: string]: boolean };
+type pressedKeys = { [key: string]: boolean };
+type input = { key: string; dt: number };
+type unprocessedInput = {
+  inputId: number;
+  input: input;
+  x: number;
+  y: number;
+  speed: number;
+};
+
+type gameData = {
+  [entityId: string]: {
+    type: "init" | "update";
+    inputId: number;
+    x: number;
+    y: number;
+    speed: number;
+  };
+};
 
 class Game {
   canvas = document.createElement("canvas");
   ctx = this.canvas.getContext("2d");
   player: Player;
   gameObjects: GameObject[] = [];
-  input: input = {};
-  inputId = 0;
+  pressedKey: pressedKeys = {};
+  unprocessedInputs: unprocessedInput[] = [];
   conn: WebSocket;
   updateRate = 30;
-  last_ts: number;
+  lastTs: number;
 
   start() {
-    this.conn = new WebSocket("ws://192.168.55.28:3000/connectplayer");
+    this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
     this.conn.onmessage = (evt) => {
-      const players = (evt.data as string).split("|");
-      for (const player of players) {
-        const data = player.split(",");
-        if (data[0] === this.player.id) {
-          this.player.x = parseFloat(data[1]);
-          this.player.y = parseFloat(data[2]);
-        } else {
-          let found = false;
-          for (const obj of this.gameObjects) {
-            if (data[0] === obj.id) {
-              found = true;
-              obj.x = parseFloat(data[1]);
-              obj.y = parseFloat(data[2]);
+      const gameData: gameData = JSON.parse(evt.data);
+
+      for (const [entityId, data] of Object.entries(gameData)) {
+        if (data.type === "init") {
+          this.player = new Player(data.x, data.y, 30, 30, "red");
+          this.player.speed = data.speed;
+          this.player.id = entityId;
+          continue;
+        }
+
+        if (this.player.id === entityId) {
+          const processingInput = this.unprocessedInputs.shift();
+          if (processingInput !== undefined) {
+            if (processingInput.inputId !== data.inputId) {
+              this.unprocessedInputs.length = 0;
+              this.player.x = data.x;
+              this.player.y = data.y;
+              this.player.speed = data.speed;
+            } else {
+              if (
+                processingInput.x !== data.x ||
+                processingInput.y !== data.y ||
+                processingInput.speed !== data.speed
+              ) {
+                this.player.x = data.x;
+                this.player.y = data.y;
+                this.player.speed = data.speed;
+                for (const uinp of this.unprocessedInputs) {
+                  this.player.handleInput(uinp.input);
+                }
+              }
             }
           }
-
-          if (!found) {
-            const newObj = new GameObject(
-              parseFloat(data[1]),
-              parseFloat(data[2]),
-              30,
-              30,
-              "green",
-            );
-            newObj.id = data[0];
+        } else {
+          const obj = this.gameObjects.find((obj) => obj.id === entityId);
+          if (obj !== undefined) {
+            obj.x = data.x;
+            obj.y = data.y;
+            obj.speed = data.speed;
+          } else {
+            const newObj = new GameObject(data.x, data.y, 30, 30, "green");
+            newObj.speed = data.speed;
+            newObj.id = entityId;
             this.gameObjects.push(newObj);
           }
         }
@@ -77,35 +113,49 @@ class Game {
 
     window.onkeyup = window.onkeydown = (evt) => {
       // evt.preventDefault();
-      this.input[evt.key.toLowerCase()] = evt.type == "keydown";
+      this.pressedKey[evt.key.toLowerCase()] = evt.type == "keydown";
     };
 
     setInterval(() => this.update(), 1000 / this.updateRate);
   }
 
   update() {
-    const now_ts = +new Date();
-    const last_ts = this.last_ts || now_ts;
-    const dt_sec = (now_ts - last_ts) / 1000;
-    this.last_ts = now_ts;
+    const nowTs = +new Date();
+    const lastTs = this.lastTs || nowTs;
+    const dt = (nowTs - lastTs) / 1000;
+    this.lastTs = nowTs;
 
+    const fps = Math.round(1000 / (nowTs - lastTs));
+    if (fps < 20) {
+      console.log(`${fps} fps`);
+    }
     this.clear();
     let key = "";
-    if (this.input.w) key += "w";
-    if (this.input.s) key += "s";
-    if (this.input.a) key += "a";
-    if (this.input.d) key += "d";
+    if (this.pressedKey.w) key += "w";
+    if (this.pressedKey.s) key += "s";
+    if (this.pressedKey.a) key += "a";
+    if (this.pressedKey.d) key += "d";
 
     if (key != "") {
+      const last_uinp =
+        this.unprocessedInputs[this.unprocessedInputs.length - 1];
+      const input = { key, dt };
+      this.player.handleInput(input);
+      const uinp: unprocessedInput = {
+        inputId: (last_uinp?.inputId ?? 0) + 1,
+        x: this.player.x,
+        y: this.player.y,
+        speed: this.player.speed,
+        input,
+      };
+      this.unprocessedInputs.push(uinp);
       this.conn.send(
         JSON.stringify({
-          id: this.inputId,
-          k: key,
-          dt: dt_sec,
+          id: uinp.inputId,
+          k: uinp.input.key,
+          dt: uinp.input.dt,
         }),
       );
-
-      this.inputId++;
     }
 
     this.gameObjects.forEach((c) => c.update(this.ctx));
@@ -123,13 +173,29 @@ class Player extends GameObject {
   update(ctx: CanvasRenderingContext2D): void {
     super.update(ctx);
   }
+
+  handleInput(input: input) {
+    const dist = +(input.dt * this.speed).toFixed(4);
+    for (const key of input.key) {
+      switch (key) {
+        case "w":
+          this.y = +(this.y - dist).toFixed(4);
+          break;
+        case "s":
+          this.y = +(this.y + dist).toFixed(4);
+          break;
+        case "a":
+          this.x = +(this.x - dist).toFixed(4);
+          break;
+        case "d":
+          this.x = +(this.x + dist).toFixed(4);
+          break;
+      }
+    }
+  }
 }
 
 window.onload = function () {
   const game = new Game();
-
-  game.player = new Player(10, 120, 30, 30, "red");
-  game.player.id = "p";
-
   game.start();
 };
