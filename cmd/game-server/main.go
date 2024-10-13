@@ -1,67 +1,69 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 const (
-	UpdatesPerSec int = 30
+	UpdatesPerSec int = 60
 )
 
-type player struct {
-	X     float64        `json:"x"`
-	Y     float64        `json:"y"`
-	Speed float64        `json:"speed"`
-	input []Input        `json:"-"`
-	send  chan<- message `json:"-"`
+type Player struct {
+	Id    string  `json:"id"`
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Speed float64 `json:"speed"`
 }
 
-type Input struct {
-	Id        int     `json:"id"`
-	Key       string  `json:"k"`
-	DeltaTime float64 `json:"dt"`
-}
-
-type actionType = int
+type inputAction = string
 
 const (
-	CreatePlayer actionType = iota
-	PlayerDisconnected
-	NewInput
+	Up        inputAction = "Up"
+	Down      inputAction = "Down"
+	Left      inputAction = "Left"
+	Right     inputAction = "Right"
+	UpLeft    inputAction = "UpLeft"
+	UpRight   inputAction = "UpRight"
+	DownLeft  inputAction = "DownLeft"
+	DownRight inputAction = "DownRight"
 )
 
-type action struct {
-	Type actionType
-	Data any
+type Input struct {
+	Index     int         `json:"i"`
+	Action    inputAction `json:"a"`
+	DeltaTime float64     `json:"dt"`
 }
 
-type message = []byte
-
-type CreatePlayerData struct {
-	send   chan<- message
-	sendId chan<- string
+type GameState struct {
+	Players        []*Player `json:"players"`
+	ProcessedInput *Input    `json:"input"`
 }
 
-type PlayerDisconnectedData struct {
-	playerId string
+type ClientConnected struct {
+	client *Client
 }
 
-type NewInputData struct {
-	Input
-	PlayerId string `json:"-"`
+type ClientDisconnected struct {
+	client *Client
+}
+
+type PlayerCreation struct {
+	client *Client
 }
 
 func main() {
-	actionChan := make(chan action)
+	eventCh := make(chan any)
+	log := log.New(os.Stdout, "", 0)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-
 		http.ServeFile(w, r, "web/static/index.html")
 	})
 
@@ -72,133 +74,110 @@ func main() {
 		upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 
-		writeChan := make(chan message)
-		idChan := make(chan string)
-		done := make(chan bool)
+		client := NewClient(conn, log)
 
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				case data := <-writeChan:
-					conn.WriteMessage(websocket.TextMessage, data)
-				}
-			}
-		}()
+		eventCh <- ClientConnected{client}
+		eventCh <- PlayerCreation{client}
 
-		actionChan <- action{
-			Type: CreatePlayer,
-			Data: CreatePlayerData{
-				send:   writeChan,
-				sendId: idChan,
-			},
-		}
-		playerId := <-idChan
+		client.ListenForInput()
 
-		for {
-			_, p, err := conn.ReadMessage()
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-
-			input := NewInputData{}
-			err = json.Unmarshal(p, &input)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			input.PlayerId = playerId
-
-			actionChan <- action{
-				Type: NewInput, Data: input,
-			}
-		}
-
-		actionChan <- action{
-			Type: PlayerDisconnected,
-			Data: PlayerDisconnectedData{
-				playerId: playerId,
-			},
-		}
-
-		done <- true
-
+		eventCh <- ClientDisconnected{client}
 	})
 
 	go func() {
-		players := make(map[string]*player)
+		clients := make(map[*Client]*Player)
+		clientsMu := sync.Mutex{}
 		var playerCounter int
 
 		ticker := time.NewTicker(time.Second / time.Duration(UpdatesPerSec))
 
 		for {
 			select {
-			case action := <-actionChan:
-				switch data := action.Data.(type) {
-				case CreatePlayerData:
-					type initData struct {
-						*player
-						Kind string `json:"type"`
-					}
-					id := fmt.Sprintf("player%d", playerCounter)
-					player := &player{30, 30, 200, []Input{}, data.send}
-					players[id] = player
-					playerCounter++
-					data.sendId <- id
+			case event := <-eventCh:
+				switch data := event.(type) {
+				case ClientConnected:
+					clientsMu.Lock()
+					clients[data.client] = nil
+					clientsMu.Unlock()
 
-					tmpMap := make(map[string]*initData)
-					tmpMap[id] = &initData{player, "init"}
-					jsonPlayer, err := json.Marshal(tmpMap)
-					if err != nil {
-						fmt.Println(err)
+				case ClientDisconnected:
+					delete(clients, data.client)
+
+				case PlayerCreation:
+					clientsMu.Lock()
+
+					id := fmt.Sprintf("player%d", playerCounter)
+					playerCounter++
+					player := &Player{id, 30, 30, 200}
+					clients[data.client] = player
+
+					gameState := GameState{}
+					gameState.Players = append(gameState.Players, player)
+
+					data.client.SendPlayerInfo(*player)
+
+					clientsMu.Unlock()
+				}
+
+			case <-ticker.C:
+				clientsMu.Lock()
+				gameState := GameState{}
+				inputMap := make(map[*Client]*Input)
+
+				for client, player := range clients {
+					if player == nil {
 						continue
 					}
 
-					data.send <- jsonPlayer
-				case PlayerDisconnectedData:
-					delete(players, data.playerId)
-				case NewInputData:
-					players[data.PlayerId].input = append(players[data.PlayerId].input, data.Input)
-				}
-			case <-ticker.C:
-				update := false
-				for _, player := range players {
-					if len(player.input) > 0 {
-						update = true
-						input := player.input[0]
-						player.input = player.input[1:]
-						distance := input.DeltaTime * player.Speed
-
-						for _, d := range input.Key {
-							switch d {
-							case 'w':
-								player.Y = toFixed(player.Y-distance, 4)
-							case 's':
-								player.Y = toFixed(player.Y+distance, 4)
-							case 'a':
-								player.X = toFixed(player.X-distance, 4)
-							case 'd':
-								player.X = toFixed(player.X+distance, 4)
-							}
-						}
+					input, ok := client.PopInput()
+					if !ok {
+						continue
 					}
+
+					distance := input.DeltaTime * player.Speed
+
+					switch input.Action {
+					case Up:
+						player.Y = toFixed(player.Y-distance, 4)
+					case UpLeft:
+						player.Y = toFixed(player.Y-distance, 4)
+						player.X = toFixed(player.X-distance, 4)
+					case Left:
+						player.X = toFixed(player.X-distance, 4)
+					case DownLeft:
+						player.X = toFixed(player.X-distance, 4)
+						player.Y = toFixed(player.Y+distance, 4)
+					case Down:
+						player.Y = toFixed(player.Y+distance, 4)
+					case DownRight:
+						player.Y = toFixed(player.Y+distance, 4)
+						player.X = toFixed(player.X+distance, 4)
+					case Right:
+						player.X = toFixed(player.X+distance, 4)
+					case UpRight:
+						player.X = toFixed(player.X+distance, 4)
+						player.Y = toFixed(player.Y-distance, 4)
+					}
+
+					inputMap[client] = &input
 				}
 
-				if update {
-					if playersData, err := json.Marshal(players); err == nil {
-						for _, player := range players {
-							player.send <- playersData
-						}
-					} else {
-						fmt.Println(err)
+				for client, player := range clients {
+					var ok bool
+					if gameState.ProcessedInput, ok = inputMap[client]; !ok {
+						gameState.ProcessedInput = nil
 					}
+
+					gameState.Players = append(gameState.Players, player)
+
+					client.SendGameState(gameState)
 				}
+
+				clientsMu.Unlock()
 			}
 		}
 	}()
