@@ -16,13 +16,6 @@ const (
 	UpdatesPerSec int = 60
 )
 
-type Player struct {
-	Id    string  `json:"id"`
-	X     float64 `json:"x"`
-	Y     float64 `json:"y"`
-	Speed float64 `json:"speed"`
-}
-
 type inputAction = string
 
 const (
@@ -112,7 +105,7 @@ func main() {
 
 					id := fmt.Sprintf("player%d", playerCounter)
 					playerCounter++
-					player := &Player{id, 30, 30, 200}
+					player := NewPlayer(id)
 					clients[data.client] = player
 
 					gameState := GameState{}
@@ -138,31 +131,7 @@ func main() {
 						continue
 					}
 
-					distance := input.DeltaTime * player.Speed
-
-					switch input.Action {
-					case Up:
-						player.Y = toFixed(player.Y-distance, 4)
-					case UpLeft:
-						player.Y = toFixed(player.Y-distance, 4)
-						player.X = toFixed(player.X-distance, 4)
-					case Left:
-						player.X = toFixed(player.X-distance, 4)
-					case DownLeft:
-						player.X = toFixed(player.X-distance, 4)
-						player.Y = toFixed(player.Y+distance, 4)
-					case Down:
-						player.Y = toFixed(player.Y+distance, 4)
-					case DownRight:
-						player.Y = toFixed(player.Y+distance, 4)
-						player.X = toFixed(player.X+distance, 4)
-					case Right:
-						player.X = toFixed(player.X+distance, 4)
-					case UpRight:
-						player.X = toFixed(player.X+distance, 4)
-						player.Y = toFixed(player.Y-distance, 4)
-					}
-
+					player.HandleInput(&input)
 					inputMap[client] = &input
 				}
 
