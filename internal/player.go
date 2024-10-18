@@ -1,4 +1,6 @@
-package main
+package game
+
+import "math"
 
 type Player struct {
 	Id    string  `json:"id"`
@@ -36,4 +38,9 @@ func (p *Player) HandleInput(input *Input) {
 		p.X = toFixed(p.X+distance, 4)
 		p.Y = toFixed(p.Y-distance, 4)
 	}
+}
+
+func toFixed(num float64, precision int) float64 {
+	ratio := math.Pow10(precision)
+	return math.Round(num*ratio) / ratio
 }

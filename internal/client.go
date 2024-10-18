@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ type messageKind = string
 
 const (
 	PlayerInit messageKind = "PlayerInit"
-	State      messageKind = "State"
+	GameState  messageKind = "GameState"
 )
 
 type message struct {
@@ -62,8 +62,8 @@ func (c *Client) HasInput() bool {
 	return c.hasUnprocessedInput.Load()
 }
 
-func (c *Client) SendGameState(gameState GameState) {
-	msg := message{State, gameState}
+func (c *Client) SendGameState(gameState State) {
+	msg := message{GameState, gameState}
 	c.sendMessage(msg)
 }
 
