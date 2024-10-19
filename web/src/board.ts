@@ -18,20 +18,15 @@ export class Board {
   }
 
   async fetch() {
-    // const rows = textBoard.split("|");
-    // rows.forEach((row, y) =>
-    //   row.split("").forEach((e, x) => {
-    //     if (e == "1") {
-    //       const entity = new GameObject(x * 50, y * 50, 50, 50, "blue");
-    //       this.entities.push(entity);
-    //     }
-    //   }),
-    // );
+    const res = await fetch("/board");
+    const data = await res.json();
+    data.e.forEach((e: any) => {
+      this.entities.push(new GameObject(e.x, e.y, e.w, e.h, "blue"));
+    });
   }
 
   draw() {
     this.clear();
-    this.drawBorder();
 
     for (const entity of this.entities) {
       entity.update(this.ctx);
@@ -42,14 +37,5 @@ export class Board {
 
   private clear() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-  }
-
-  private drawBorder() {
-    const size = 50;
-    this.ctx.fillStyle = "blue";
-    this.ctx.fillRect(0, 0, this.width, size);
-    this.ctx.fillRect(0, this.height - size, this.width, size);
-    this.ctx.fillRect(0, size, size, this.height - 2 * size);
-    this.ctx.fillRect(this.width - size, size, size, this.height - 2 * size);
   }
 }

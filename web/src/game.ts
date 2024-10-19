@@ -1,5 +1,5 @@
 import { Board } from "./board";
-import { GameObject, Player } from "./gameObject";
+import { Player } from "./gameObject";
 import { Action, unprocessedInput } from "./input";
 
 type pressedKeys = { [key: string]: boolean };
