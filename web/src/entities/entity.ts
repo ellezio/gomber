@@ -2,6 +2,8 @@ export type position = { x: number; y: number };
 export type size = { width: number; height: number };
 
 export class Entity {
+  prevPosition: position;
+
   constructor(
     public id: number,
     public position: position,

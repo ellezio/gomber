@@ -38,6 +38,12 @@ export class Board {
     }
 
     for (const entity of this.entities) {
+      if (this.player.collision.check(entity)) {
+        entity.color = "green";
+      } else {
+        entity.color = "blue";
+      }
+
       entity.update(this.ctx);
     }
 

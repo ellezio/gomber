@@ -1,8 +1,11 @@
 import { Entity, position, size } from "./entity";
 import { input, Action } from "../input";
+import { CollisionComponent } from "./components/collisionComponent";
 
 export class Player extends Entity {
   speed: number = 200;
+
+  collision = new CollisionComponent(this);
 
   constructor(
     id: number,
@@ -21,6 +24,8 @@ export class Player extends Entity {
 
   handleInput(input: input) {
     const dist = input.dt * this.speed;
+
+    this.prevPosition = { x: this.position.x, y: this.position.y };
 
     switch (input.action) {
       case Action.Up:

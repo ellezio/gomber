@@ -53,7 +53,7 @@ export class Game {
 
     this.board.player = new Player(
       0,
-      { x: 100, y: 100 },
+      { x: 200, y: 200 },
       { width: 30, height: 30 },
       200,
       "red",
