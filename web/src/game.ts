@@ -1,5 +1,5 @@
 import { Board } from "./board";
-import { Player } from "./gameObject";
+import { Player } from "./entities/player";
 import { Action, unprocessedInput } from "./input";
 
 type pressedKeys = { [key: string]: boolean };
@@ -8,7 +8,7 @@ type Message =
   | {
       type: "PlayerInit";
       data: {
-        id: string;
+        id: number;
         x: number;
         y: number;
         speed: number;
@@ -18,7 +18,7 @@ type Message =
       type: "State";
       data: {
         players: {
-          id: string;
+          id: number;
           x: number;
           y: number;
           speed: number;
@@ -45,11 +45,19 @@ export class Game {
   lastTs: number;
 
   async start() {
-    this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
-    this.conn.onmessage = this.messageHandler.bind(this);
+    // this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
+    // this.conn.onmessage = this.messageHandler.bind(this);
 
     this.board = new Board(1000, 600);
     this.populateDOM();
+
+    this.board.player = new Player(
+      0,
+      { x: 100, y: 100 },
+      { width: 30, height: 30 },
+      200,
+      "red",
+    );
 
     await this.board.fetch();
 
@@ -65,8 +73,8 @@ export class Game {
       const data = message.data;
       this.board.player = new Player(
         data.id,
-        data.x,
-        data.y,
+        { x: data.x, y: data.y },
+        { width: 30, height: 30 },
         data.speed,
         "red",
       );
@@ -84,8 +92,8 @@ export class Game {
           if (processingInput !== undefined) {
             if (processingInput.inputId !== data.input.i) {
               this.unprocessedInputs.length = 0;
-              this.board.player.x = player.x;
-              this.board.player.y = player.y;
+              this.board.player.position.x = player.x;
+              this.board.player.position.y = player.y;
               this.board.player.speed = player.speed;
             } else {
               if (
@@ -93,8 +101,8 @@ export class Game {
                 processingInput.y !== player.y ||
                 processingInput.speed !== player.speed
               ) {
-                this.board.player.x = player.x;
-                this.board.player.y = player.y;
+                this.board.player.position.x = player.x;
+                this.board.player.position.y = player.y;
                 this.board.player.speed = player.speed;
                 for (const uinp of this.unprocessedInputs) {
                   this.board.player.handleInput(uinp.input);
@@ -103,16 +111,18 @@ export class Game {
             }
           }
         } else {
-          const obj = this.board.entities.find((obj) => obj.id === player.id);
+          const obj = this.board.entities.find(
+            (obj) => obj.id === player.id,
+          ) as Player;
           if (obj !== undefined) {
-            obj.x = player.x;
-            obj.y = player.y;
+            obj.position.x = player.x;
+            obj.position.y = player.y;
             obj.speed = player.speed;
           } else {
             const newPlayer = new Player(
               player.id,
-              player.x,
-              player.y,
+              { x: player.x, y: player.y },
+              { width: 30, height: 30 },
               player.speed,
               "green",
             );
@@ -161,28 +171,27 @@ export class Game {
     else if (this.pressedKey.s) action = Action.Down;
     else if (this.pressedKey.a) action = Action.Left;
 
-    if (action != "") {
-      const last_uinp =
-        this.unprocessedInputs[this.unprocessedInputs.length - 1];
-      const input = { action, dt };
-      this.board.player.handleInput(input);
-      const uinp: unprocessedInput = {
-        inputId: (last_uinp?.inputId ?? 0) + 1,
-        x: this.board.player.x,
-        y: this.board.player.y,
-        speed: this.board.player.speed,
-        input,
-      };
-      this.unprocessedInputs.push(uinp);
-      this.conn.send(
-        JSON.stringify({
-          i: uinp.inputId,
-          a: uinp.input.action,
-          dt: uinp.input.dt,
-        }),
-      );
-    }
+    const input = action === "" ? null : { action, dt };
+    this.board.update(input);
 
-    this.board.draw();
+    // if (input != null) {
+    //   const last_uinp =
+    //     this.unprocessedInputs[this.unprocessedInputs.length - 1];
+    //   const uinp: unprocessedInput = {
+    //     inputId: (last_uinp?.inputId ?? 0) + 1,
+    //     x: this.board.player.position.x,
+    //     y: this.board.player.position.y,
+    //     speed: this.board.player.speed,
+    //     input,
+    //   };
+    //   this.unprocessedInputs.push(uinp);
+    //   this.conn.send(
+    //     JSON.stringify({
+    //       i: uinp.inputId,
+    //       a: uinp.input.action,
+    //       dt: uinp.input.dt,
+    //     }),
+    //   );
+    // }
   }
 }

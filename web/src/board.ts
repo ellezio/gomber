@@ -1,11 +1,14 @@
-import { GameObject, Player } from "./gameObject";
+import { Entity, position, size } from "./entities/entity";
+import { Player } from "./entities/player";
+import { Wall } from "./entities/wall";
+import { input } from "./input";
 
 export class Board {
   canvas = document.createElement("canvas");
   ctx = this.canvas.getContext("2d");
 
-  entities: GameObject[] = [];
   player: Player;
+  entities: Entity[] = [];
 
   constructor(
     private width: number,
@@ -21,18 +24,24 @@ export class Board {
     const res = await fetch("/board");
     const data = await res.json();
     data.e.forEach((e: any) => {
-      this.entities.push(new GameObject(e.x, e.y, e.w, e.h, "blue"));
+      const pos = { x: e.x, y: e.y } as position;
+      const size = { width: e.w, height: e.h } as size;
+      this.entities.push(new Wall(0, pos, size, "blue"));
     });
   }
 
-  draw() {
+  update(input: input = null) {
     this.clear();
+
+    if (input !== null) {
+      this.player.handleInput(input);
+    }
 
     for (const entity of this.entities) {
       entity.update(this.ctx);
     }
 
-    this.player?.update(this.ctx);
+    this.player.update(this.ctx);
   }
 
   private clear() {
