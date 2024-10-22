@@ -2,7 +2,6 @@ package game
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -10,37 +9,48 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type updateMessage struct {
+	ControlledEntityId int    `json:"controlledEntityId"`
+	ProcessedInput     *Input `json:"processedInput"`
+	Board              *Board `json:"board"`
+}
+
 type Client struct {
 	mu   sync.Mutex
 	log  *log.Logger
 	conn *websocket.Conn
 
-	inputs              []Input
+	unprocessedInputs   []Input
+	processedInput      *Input
 	hasUnprocessedInput atomic.Bool
-}
-
-type messageKind = string
-
-const (
-	PlayerInit messageKind = "PlayerInit"
-	GameState  messageKind = "GameState"
-)
-
-type message struct {
-	Kind messageKind `json:"type"`
-	Data any         `json:"data"`
 }
 
 func NewClient(conn *websocket.Conn, log *log.Logger) *Client {
 	return &Client{
-		mu:     sync.Mutex{},
-		inputs: []Input{},
-		conn:   conn,
-		log:    log,
+		mu:                sync.Mutex{},
+		unprocessedInputs: []Input{},
+		processedInput:    nil,
+		conn:              conn,
+		log:               log,
 	}
 }
 
-func (c *Client) PopInput() (Input, bool) {
+func (c *Client) SetProcessedInput(input *Input) {
+	c.mu.Lock()
+	c.processedInput = input
+	c.mu.Unlock()
+}
+
+func (c *Client) getAndDeleteProcessedInput() *Input {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	i := c.processedInput
+	c.processedInput = nil
+	return i
+}
+
+func (c *Client) PopUnprocessedInput() (Input, bool) {
 	if !c.HasInput() {
 		return Input{}, false
 	}
@@ -48,10 +58,10 @@ func (c *Client) PopInput() (Input, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	input := c.inputs[0]
-	c.inputs = c.inputs[1:]
+	input := c.unprocessedInputs[0]
+	c.unprocessedInputs = c.unprocessedInputs[1:]
 
-	if len(c.inputs) == 0 {
+	if len(c.unprocessedInputs) == 0 {
 		c.hasUnprocessedInput.Store(false)
 	}
 
@@ -62,17 +72,19 @@ func (c *Client) HasInput() bool {
 	return c.hasUnprocessedInput.Load()
 }
 
-func (c *Client) SendGameState(gameState State) {
-	msg := message{GameState, gameState}
-	c.sendMessage(msg)
+func (c *Client) SendUpdate(controlledEntityId int, board *Board) {
+	msg := updateMessage{
+		ControlledEntityId: controlledEntityId,
+		ProcessedInput:     c.getAndDeleteProcessedInput(),
+		Board:              board,
+	}
+
+	if err := c.sendMessage(msg); err != nil {
+		c.log.Println(err)
+	}
 }
 
-func (c *Client) SendPlayerInfo(player Player) {
-	msg := message{PlayerInit, player}
-	c.sendMessage(msg)
-}
-
-func (c *Client) sendMessage(msg message) error {
+func (c *Client) sendMessage(msg any) error {
 	if msg, err := c.serializeMessage(msg); err != nil {
 		return err
 	} else {
@@ -84,11 +96,11 @@ func (c *Client) sendMessage(msg message) error {
 	return nil
 }
 
-func (c *Client) serializeMessage(msg message) ([]byte, error) {
+func (c *Client) serializeMessage(msg any) ([]byte, error) {
 	if msg, err := json.Marshal(msg); err == nil {
 		return msg, nil
 	} else {
-		return nil, errors.New("")
+		return nil, err
 	}
 }
 
@@ -108,7 +120,7 @@ func (c *Client) ListenForInput() {
 		}
 
 		c.mu.Lock()
-		c.inputs = append(c.inputs, input)
+		c.unprocessedInputs = append(c.unprocessedInputs, input)
 		c.hasUnprocessedInput.Store(true)
 		c.mu.Unlock()
 	}

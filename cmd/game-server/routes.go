@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 
 	game "github.com/ellezio/gomber/internal"
 	"github.com/gorilla/websocket"
@@ -34,12 +32,5 @@ func setupRoutes(eventCh chan<- any, log *log.Logger) {
 		client.ListenForInput()
 
 		eventCh <- game.ClientDisconnected{Client: client}
-	})
-
-	http.HandleFunc("/board", func(w http.ResponseWriter, r *http.Request) {
-		bText, _ := os.ReadFile("maps/map1.txt")
-		board := game.ParseToBoard([]byte(bText))
-		b, _ := json.Marshal(board)
-		w.Write(b)
 	})
 }

@@ -1,9 +1,10 @@
 package game
 
 import (
-	"fmt"
-	"sync"
+	"math"
 	"time"
+
+	"github.com/ellezio/gomber/internal/entity"
 )
 
 const (
@@ -23,9 +24,9 @@ type PlayerCreation struct {
 }
 
 func StartGameLoop(eventCh <-chan any) {
-	clients := make(map[*Client]*Player)
-	clientsMu := sync.Mutex{}
-	var playerCounter int
+	clients := make(map[*Client]*entity.Player)
+	board := NewBoard()
+	board.LoadMap("map1.txt")
 
 	ticker := time.NewTicker(time.Second / time.Duration(updatesPerSec))
 
@@ -34,60 +35,67 @@ func StartGameLoop(eventCh <-chan any) {
 		case event := <-eventCh:
 			switch data := event.(type) {
 			case ClientConnected:
-				clientsMu.Lock()
 				clients[data.Client] = nil
-				clientsMu.Unlock()
 
 			case ClientDisconnected:
 				delete(clients, data.Client)
 
 			case PlayerCreation:
-				clientsMu.Lock()
-
-				id := fmt.Sprintf("player%d", playerCounter)
-				playerCounter++
-				player := NewPlayer(id)
+				player := entity.NewPlayer()
+				board.AddPlayer(player)
 				clients[data.Client] = player
-
-				gameState := State{}
-				gameState.Players = append(gameState.Players, player)
-
-				data.Client.SendPlayerInfo(*player)
-
-				clientsMu.Unlock()
 			}
 
 		case <-ticker.C:
-			clientsMu.Lock()
-			gameState := State{}
-			inputMap := make(map[*Client]*Input)
-
 			for client, player := range clients {
 				if player == nil {
 					continue
 				}
 
-				input, ok := client.PopInput()
+				input, ok := client.PopUnprocessedInput()
 				if !ok {
 					continue
 				}
 
-				player.HandleInput(&input)
-				inputMap[client] = &input
+				HandleInput(player, &input)
+				client.SetProcessedInput(&input)
 			}
 
 			for client, player := range clients {
-				var ok bool
-				if gameState.ProcessedInput, ok = inputMap[client]; !ok {
-					gameState.ProcessedInput = nil
-				}
-
-				gameState.Players = append(gameState.Players, player)
-
-				client.SendGameState(gameState)
+				client.SendUpdate(player.Id, board)
 			}
-
-			clientsMu.Unlock()
 		}
 	}
+}
+
+func HandleInput(player *entity.Player, input *Input) {
+	distance := input.DeltaTime * player.Speed
+
+	switch input.Action {
+	case Up:
+		player.Y = toFixed(player.Y-distance, 4)
+	case UpLeft:
+		player.Y = toFixed(player.Y-distance, 4)
+		player.X = toFixed(player.X-distance, 4)
+	case Left:
+		player.X = toFixed(player.X-distance, 4)
+	case DownLeft:
+		player.X = toFixed(player.X-distance, 4)
+		player.Y = toFixed(player.Y+distance, 4)
+	case Down:
+		player.Y = toFixed(player.Y+distance, 4)
+	case DownRight:
+		player.Y = toFixed(player.Y+distance, 4)
+		player.X = toFixed(player.X+distance, 4)
+	case Right:
+		player.X = toFixed(player.X+distance, 4)
+	case UpRight:
+		player.X = toFixed(player.X+distance, 4)
+		player.Y = toFixed(player.Y-distance, 4)
+	}
+}
+
+func toFixed(num float64, precision int) float64 {
+	ratio := math.Pow10(precision)
+	return math.Round(num*ratio) / ratio
 }

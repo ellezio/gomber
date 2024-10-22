@@ -1,35 +1,31 @@
 import { Board } from "./board";
+import { position, size } from "./entities/entity";
 import { Player } from "./entities/player";
+import { Wall } from "./entities/wall";
 import { Action, unprocessedInput } from "./input";
 
 type pressedKeys = { [key: string]: boolean };
 
-type Message =
-  | {
-      type: "PlayerInit";
-      data: {
-        id: number;
-        x: number;
-        y: number;
-        speed: number;
-      };
-    }
-  | {
-      type: "State";
-      data: {
-        players: {
-          id: number;
-          x: number;
-          y: number;
-          speed: number;
-        }[];
-        input: {
-          i: number;
-          a: Action;
-          dt: number;
-        };
-      };
-    };
+type entityInMsg = {
+  id: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+type playerInMsg = entityInMsg & {
+  speed: number;
+};
+
+type boardUpdateMessage = {
+  controlledEntityId: number;
+  processedInput: { i: number; a: Action; dt: number };
+  board: {
+    players: playerInMsg[];
+    walls: entityInMsg[];
+  };
+};
 
 export class Game {
   board: Board;
@@ -45,21 +41,11 @@ export class Game {
   lastTs: number;
 
   async start() {
-    // this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
-    // this.conn.onmessage = this.messageHandler.bind(this);
-
     this.board = new Board(1000, 600);
     this.populateDOM();
 
-    this.board.player = new Player(
-      0,
-      { x: 200, y: 200 },
-      { width: 30, height: 30 },
-      200,
-      "red",
-    );
-
-    await this.board.fetch();
+    this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
+    this.conn.onmessage = this.messageHandler.bind(this);
 
     window.onkeyup = window.onkeydown = this.handleKeyboardEvent.bind(this);
 
@@ -67,68 +53,71 @@ export class Game {
   }
 
   private messageHandler(evt: MessageEvent<any>) {
-    const message: Message = JSON.parse(evt.data);
+    const data: boardUpdateMessage = JSON.parse(evt.data);
 
-    if (message.type === "PlayerInit") {
-      const data = message.data;
-      this.board.player = new Player(
-        data.id,
-        { x: data.x, y: data.y },
-        { width: 30, height: 30 },
-        data.speed,
-        "red",
-      );
-      return;
-    } else if (message.type === "State") {
-      const data = message.data;
+    for (const player of data.board.players) {
+      if (player.id === data.controlledEntityId) {
+        if (this.board.player === undefined) {
+          this.board.player = new Player(
+            player.id,
+            { x: player.x, y: player.y },
+            { width: player.w, height: player.h },
+            player.speed,
+            "red",
+          );
+        }
 
-      for (const player of data.players ?? []) {
-        if (this.board.player.id === player.id) {
-          if (data.input === null) {
-            continue;
-          }
+        if (data.processedInput === null) continue;
 
-          const processingInput = this.unprocessedInputs.shift();
-          if (processingInput !== undefined) {
-            if (processingInput.inputId !== data.input.i) {
-              this.unprocessedInputs.length = 0;
+        const processingInput = this.unprocessedInputs.shift();
+        if (processingInput !== undefined) {
+          if (processingInput.inputId !== data.processedInput.i) {
+            this.unprocessedInputs.length = 0;
+            this.board.player.position.x = player.x;
+            this.board.player.position.y = player.y;
+            this.board.player.speed = player.speed;
+          } else {
+            if (
+              processingInput.x !== player.x ||
+              processingInput.y !== player.y ||
+              processingInput.speed !== player.speed
+            ) {
               this.board.player.position.x = player.x;
               this.board.player.position.y = player.y;
               this.board.player.speed = player.speed;
-            } else {
-              if (
-                processingInput.x !== player.x ||
-                processingInput.y !== player.y ||
-                processingInput.speed !== player.speed
-              ) {
-                this.board.player.position.x = player.x;
-                this.board.player.position.y = player.y;
-                this.board.player.speed = player.speed;
-                for (const uinp of this.unprocessedInputs) {
-                  this.board.player.handleInput(uinp.input);
-                }
+              for (const uinp of this.unprocessedInputs) {
+                this.board.player.handleInput(uinp.input);
               }
             }
           }
-        } else {
-          const obj = this.board.entities.find(
-            (obj) => obj.id === player.id,
-          ) as Player;
-          if (obj !== undefined) {
-            obj.position.x = player.x;
-            obj.position.y = player.y;
-            obj.speed = player.speed;
-          } else {
-            const newPlayer = new Player(
-              player.id,
-              { x: player.x, y: player.y },
-              { width: 30, height: 30 },
-              player.speed,
-              "green",
-            );
-            this.board.entities.push(newPlayer);
-          }
         }
+      } else {
+        const obj = this.board.entities.find(
+          (obj) => obj.id === player.id,
+        ) as Player;
+        if (obj !== undefined) {
+          obj.position.x = player.x;
+          obj.position.y = player.y;
+          obj.speed = player.speed;
+        } else {
+          const newPlayer = new Player(
+            player.id,
+            { x: player.x, y: player.y },
+            { width: player.w, height: player.h },
+            player.speed,
+            "green",
+          );
+          this.board.entities.push(newPlayer);
+        }
+      }
+    }
+
+    if (this.board.entities.length < (data.board.walls?.length ?? 0)) {
+      this.board.entities = [];
+      for (const wall of data.board.walls) {
+        const pos = { x: wall.x, y: wall.y } as position;
+        const size = { width: wall.w, height: wall.h } as size;
+        this.board.entities.push(new Wall(0, pos, size, "blue"));
       }
     }
   }
@@ -174,24 +163,24 @@ export class Game {
     const input = action === "" ? null : { action, dt };
     this.board.update(input);
 
-    // if (input != null) {
-    //   const last_uinp =
-    //     this.unprocessedInputs[this.unprocessedInputs.length - 1];
-    //   const uinp: unprocessedInput = {
-    //     inputId: (last_uinp?.inputId ?? 0) + 1,
-    //     x: this.board.player.position.x,
-    //     y: this.board.player.position.y,
-    //     speed: this.board.player.speed,
-    //     input,
-    //   };
-    //   this.unprocessedInputs.push(uinp);
-    //   this.conn.send(
-    //     JSON.stringify({
-    //       i: uinp.inputId,
-    //       a: uinp.input.action,
-    //       dt: uinp.input.dt,
-    //     }),
-    //   );
-    // }
+    if (input != null) {
+      const last_uinp =
+        this.unprocessedInputs[this.unprocessedInputs.length - 1];
+      const uinp: unprocessedInput = {
+        inputId: (last_uinp?.inputId ?? 0) + 1,
+        x: this.board.player.position.x,
+        y: this.board.player.position.y,
+        speed: this.board.player.speed,
+        input,
+      };
+      this.unprocessedInputs.push(uinp);
+      this.conn.send(
+        JSON.stringify({
+          i: uinp.inputId,
+          a: uinp.input.action,
+          dt: uinp.input.dt,
+        }),
+      );
+    }
   }
 }

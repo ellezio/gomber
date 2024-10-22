@@ -2,63 +2,74 @@ package game
 
 import (
 	"bytes"
+	"os"
 	"strconv"
+
+	"github.com/ellezio/gomber/internal/entity"
 )
 
-type EntityType = int
+type MapEntityType = int
 
 const (
-	Ground EntityType = iota
-	Wall
+	MapWall MapEntityType = iota + 1
 )
 
-type Position struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
-
-type Size struct {
-	Width  int `json:"w"`
-	Height int `json:"h"`
-}
-
-type Entity struct {
-	Position
-	Size
-}
-
 type Board struct {
-	Size
-	Entity []*Entity `json:"e"`
+	Width  int
+	Height int
+
+	Players []*entity.Player `json:"players"`
+	Walls   []*entity.Wall   `json:"walls"`
+
+	entityIdLast int
 }
 
-func ParseToBoard(b []byte) *Board {
-	board := &Board{Size: Size{1000, 600}}
-	var blockWidth, blockHeight int
+func NewBoard() *Board {
+	return &Board{
+		Width:  1000,
+		Height: 600,
+	}
+}
 
-	for i, parts := range bytes.Split(b, []byte(";")) {
+func (b *Board) LoadMap(mapName string) {
+	mapBytes, _ := os.ReadFile("maps/" + mapName)
+	var blockWidth, blockHeight int
+	for i, parts := range bytes.Split(mapBytes, []byte(";")) {
 		for j, part := range bytes.Split(parts, []byte(":")) {
 			if i == 0 {
 				if j == 0 {
 					w, _ := strconv.Atoi(string(part))
-					blockWidth = board.Width / w
+					blockWidth = b.Width / w
 				} else if j == 1 {
 					h, _ := strconv.Atoi(string(part))
-					blockHeight = board.Height / h
+					blockHeight = b.Height / h
 				}
 			} else {
 				eType, _ := strconv.Atoi(string(part))
 				switch eType {
-				case Wall:
+				case MapWall:
 					x := float64(j * blockWidth)
 					y := float64((i - 1) * blockHeight)
-					e := &Entity{Position: Position{x, y}, Size: Size{blockWidth, blockHeight}}
-					board.Entity = append(board.Entity, e)
+					wall := entity.NewWall(x, y, blockWidth, blockHeight)
+					b.AddWall(wall)
 				}
 			}
 
 		}
 	}
+}
 
-	return board
+func (b *Board) generateEntityId() int {
+	b.entityIdLast++
+	return b.entityIdLast
+}
+
+func (b *Board) AddPlayer(player *entity.Player) {
+	player.Id = b.generateEntityId()
+	b.Players = append(b.Players, player)
+}
+
+func (b *Board) AddWall(wall *entity.Wall) {
+	wall.Id = b.generateEntityId()
+	b.Walls = append(b.Walls, wall)
 }
