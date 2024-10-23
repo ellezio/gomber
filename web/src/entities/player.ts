@@ -15,6 +15,7 @@ export class Player extends Entity {
     color: string,
   ) {
     super(id, position, size, color);
+    this.prevPosition = position;
     this.speed = speed;
   }
 
@@ -23,39 +24,33 @@ export class Player extends Entity {
   }
 
   handleInput(input: input) {
-    const dist = input.dt * this.speed;
+    const direction = { x: 0.0, y: 0.0 };
+
+    if (input.actions.includes(Action.Up)) {
+      direction.y -= 1.0;
+    }
+
+    if (input.actions.includes(Action.Down)) {
+      direction.y += 1.0;
+    }
+
+    if (input.actions.includes(Action.Left)) {
+      direction.x -= 1.0;
+    }
+
+    if (input.actions.includes(Action.Right)) {
+      direction.x += 1.0;
+    }
+
+    if (direction.x != 0.0 && direction.y != 0.0) {
+      const c = Math.sqrt(2) / 2;
+      direction.x *= c;
+      direction.y *= c;
+    }
 
     this.prevPosition = { x: this.position.x, y: this.position.y };
 
-    switch (input.action) {
-      case Action.Up:
-        this.position.y = +(this.position.y - dist).toFixed(4);
-        break;
-      case Action.UpRight:
-        this.position.y = +(this.position.y - dist).toFixed(4);
-        this.position.x = +(this.position.x + dist).toFixed(4);
-        break;
-      case Action.Right:
-        this.position.x = +(this.position.x + dist).toFixed(4);
-        break;
-      case Action.DownRight:
-        this.position.x = +(this.position.x + dist).toFixed(4);
-        this.position.y = +(this.position.y + dist).toFixed(4);
-        break;
-      case Action.Down:
-        this.position.y = +(this.position.y + dist).toFixed(4);
-        break;
-      case Action.DownLeft:
-        this.position.y = +(this.position.y + dist).toFixed(4);
-        this.position.x = +(this.position.x - dist).toFixed(4);
-        break;
-      case Action.Left:
-        this.position.x = +(this.position.x - dist).toFixed(4);
-        break;
-      case Action.UpLeft:
-        this.position.x = +(this.position.x - dist).toFixed(4);
-        this.position.y = +(this.position.y - dist).toFixed(4);
-        break;
-    }
+    this.position.x += +(direction.x * input.dt * this.speed).toFixed(4);
+    this.position.y += +(direction.y * input.dt * this.speed).toFixed(4);
   }
 }

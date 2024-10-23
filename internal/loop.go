@@ -1,7 +1,6 @@
 package game
 
 import (
-	"math"
 	"time"
 
 	"github.com/ellezio/gomber/internal/entity"
@@ -57,7 +56,7 @@ func StartGameLoop(eventCh <-chan any) {
 					continue
 				}
 
-				HandleInput(player, &input)
+				player.Move(&input)
 				client.SetProcessedInput(&input)
 			}
 
@@ -66,36 +65,4 @@ func StartGameLoop(eventCh <-chan any) {
 			}
 		}
 	}
-}
-
-func HandleInput(player *entity.Player, input *Input) {
-	distance := input.DeltaTime * player.Speed
-
-	switch input.Action {
-	case Up:
-		player.Y = toFixed(player.Y-distance, 4)
-	case UpLeft:
-		player.Y = toFixed(player.Y-distance, 4)
-		player.X = toFixed(player.X-distance, 4)
-	case Left:
-		player.X = toFixed(player.X-distance, 4)
-	case DownLeft:
-		player.X = toFixed(player.X-distance, 4)
-		player.Y = toFixed(player.Y+distance, 4)
-	case Down:
-		player.Y = toFixed(player.Y+distance, 4)
-	case DownRight:
-		player.Y = toFixed(player.Y+distance, 4)
-		player.X = toFixed(player.X+distance, 4)
-	case Right:
-		player.X = toFixed(player.X+distance, 4)
-	case UpRight:
-		player.X = toFixed(player.X+distance, 4)
-		player.Y = toFixed(player.Y-distance, 4)
-	}
-}
-
-func toFixed(num float64, precision int) float64 {
-	ratio := math.Pow10(precision)
-	return math.Round(num*ratio) / ratio
 }

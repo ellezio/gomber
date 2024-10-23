@@ -1,4 +1,4 @@
-export type input = { action: string; dt: number };
+export type input = { actions: Action[]; dt: number };
 
 export type unprocessedInput = {
   inputId: number;
@@ -9,12 +9,8 @@ export type unprocessedInput = {
 };
 
 export enum Action {
-  Up = "Up",
-  Down = "Down",
-  Left = "Left",
-  Right = "Right",
-  UpLeft = "UpLeft",
-  UpRight = "UpRight",
-  DownLeft = "DownLeft",
-  DownRight = "DownRight",
+  Up = "up",
+  Down = "down",
+  Left = "left",
+  Right = "right",
 }

@@ -6,13 +6,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/ellezio/gomber/internal/input"
 	"github.com/gorilla/websocket"
 )
 
 type updateMessage struct {
-	ControlledEntityId int    `json:"controlledEntityId"`
-	ProcessedInput     *Input `json:"processedInput"`
-	Board              *Board `json:"board"`
+	ControlledEntityId int          `json:"controlledEntityId"`
+	ProcessedInput     *input.Input `json:"processedInput"`
+	Board              *Board       `json:"board"`
 }
 
 type Client struct {
@@ -20,28 +21,28 @@ type Client struct {
 	log  *log.Logger
 	conn *websocket.Conn
 
-	unprocessedInputs   []Input
-	processedInput      *Input
+	unprocessedInputs   []input.Input
+	processedInput      *input.Input
 	hasUnprocessedInput atomic.Bool
 }
 
 func NewClient(conn *websocket.Conn, log *log.Logger) *Client {
 	return &Client{
 		mu:                sync.Mutex{},
-		unprocessedInputs: []Input{},
+		unprocessedInputs: []input.Input{},
 		processedInput:    nil,
 		conn:              conn,
 		log:               log,
 	}
 }
 
-func (c *Client) SetProcessedInput(input *Input) {
+func (c *Client) SetProcessedInput(inp *input.Input) {
 	c.mu.Lock()
-	c.processedInput = input
+	c.processedInput = inp
 	c.mu.Unlock()
 }
 
-func (c *Client) getAndDeleteProcessedInput() *Input {
+func (c *Client) getAndDeleteProcessedInput() *input.Input {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -50,9 +51,9 @@ func (c *Client) getAndDeleteProcessedInput() *Input {
 	return i
 }
 
-func (c *Client) PopUnprocessedInput() (Input, bool) {
+func (c *Client) PopUnprocessedInput() (input.Input, bool) {
 	if !c.HasInput() {
-		return Input{}, false
+		return input.Input{}, false
 	}
 
 	c.mu.Lock()
@@ -112,7 +113,7 @@ func (c *Client) ListenForInput() {
 			break
 		}
 
-		input := Input{}
+		input := input.Input{}
 		err = json.Unmarshal(p, &input)
 		if err != nil {
 			c.log.Println(err)

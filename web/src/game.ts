@@ -20,7 +20,7 @@ type playerInMsg = entityInMsg & {
 
 type boardUpdateMessage = {
   controlledEntityId: number;
-  processedInput: { i: number; a: Action; dt: number };
+  processedInput: { id: number; actions: Action[]; dt: number };
   board: {
     players: playerInMsg[];
     walls: entityInMsg[];
@@ -71,7 +71,7 @@ export class Game {
 
         const processingInput = this.unprocessedInputs.shift();
         if (processingInput !== undefined) {
-          if (processingInput.inputId !== data.processedInput.i) {
+          if (processingInput.inputId !== data.processedInput.id) {
             this.unprocessedInputs.length = 0;
             this.board.player.position.x = player.x;
             this.board.player.position.y = player.y;
@@ -150,17 +150,13 @@ export class Game {
       this.fc = 0;
     }
 
-    let action = "";
-    if (this.pressedKey.w && this.pressedKey.d) action = Action.UpRight;
-    else if (this.pressedKey.s && this.pressedKey.d) action = Action.DownRight;
-    else if (this.pressedKey.s && this.pressedKey.a) action = Action.DownLeft;
-    else if (this.pressedKey.w && this.pressedKey.a) action = Action.UpLeft;
-    else if (this.pressedKey.w) action = Action.Up;
-    else if (this.pressedKey.d) action = Action.Right;
-    else if (this.pressedKey.s) action = Action.Down;
-    else if (this.pressedKey.a) action = Action.Left;
+    const actions = [];
+    if (this.pressedKey.w) actions.push(Action.Up);
+    if (this.pressedKey.d) actions.push(Action.Right);
+    if (this.pressedKey.s) actions.push(Action.Down);
+    if (this.pressedKey.a) actions.push(Action.Left);
 
-    const input = action === "" ? null : { action, dt };
+    const input = actions.length > 0 ? { actions, dt } : null;
     this.board.update(input);
 
     if (input != null) {
@@ -176,8 +172,8 @@ export class Game {
       this.unprocessedInputs.push(uinp);
       this.conn.send(
         JSON.stringify({
-          i: uinp.inputId,
-          a: uinp.input.action,
+          id: uinp.inputId,
+          actions: uinp.input.actions,
           dt: uinp.input.dt,
         }),
       );
