@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ellezio/gomber/internal/entity"
+	"github.com/ellezio/gomber/internal/input"
 )
 
 const (
@@ -46,6 +47,8 @@ func StartGameLoop(eventCh <-chan any) {
 			}
 
 		case <-ticker.C:
+			inputHandler := input.InputHandler{}
+
 			for client, player := range clients {
 				if player == nil {
 					continue
@@ -56,7 +59,10 @@ func StartGameLoop(eventCh <-chan any) {
 					continue
 				}
 
-				player.Move(&input)
+				if command := inputHandler.HandleInput(&input); command != nil {
+					command(player)
+				}
+
 				client.SetProcessedInput(&input)
 			}
 

@@ -1,6 +1,6 @@
 import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
-import { input } from "./input";
+import { input, InputHandler } from "./input";
 
 export class Board {
   canvas = document.createElement("canvas");
@@ -12,6 +12,7 @@ export class Board {
   constructor(
     private width: number,
     private height: number,
+    private inputHandler: InputHandler,
   ) {
     this.canvas.width = width;
     this.canvas.height = height;
@@ -22,8 +23,9 @@ export class Board {
   update(input: input = null) {
     this.clear();
 
-    if (input !== null) {
-      this.player?.handleInput(input);
+    if (this.player !== undefined && input !== null) {
+      const command = this.inputHandler.handleInput(input);
+      command && command(this.player);
     }
 
     for (const entity of this.entities) {

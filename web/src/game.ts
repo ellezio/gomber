@@ -2,9 +2,7 @@ import { Board } from "./board";
 import { position, size } from "./entities/entity";
 import { Player } from "./entities/player";
 import { Wall } from "./entities/wall";
-import { Action, unprocessedInput } from "./input";
-
-type pressedKeys = { [key: string]: boolean };
+import { Action, InputHandler, unprocessedInput } from "./input";
 
 type entityInMsg = {
   id: number;
@@ -29,25 +27,25 @@ type boardUpdateMessage = {
 
 export class Game {
   board: Board;
+  inputHandler = new InputHandler();
 
   fps = document.createElement("div");
   fc = 0;
   dtSum = 0;
 
-  pressedKey: pressedKeys = {};
   unprocessedInputs: unprocessedInput[] = [];
   conn: WebSocket;
   updateRate = 50;
   lastTs: number;
 
   async start() {
-    this.board = new Board(1000, 600);
+    this.board = new Board(1000, 600, this.inputHandler);
     this.populateDOM();
 
     this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
     this.conn.onmessage = this.messageHandler.bind(this);
 
-    window.onkeyup = window.onkeydown = this.handleKeyboardEvent.bind(this);
+    window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
     setInterval(() => this.update(), 1000 / this.updateRate);
   }
@@ -86,7 +84,8 @@ export class Game {
               this.board.player.position.y = player.y;
               this.board.player.speed = player.speed;
               for (const uinp of this.unprocessedInputs) {
-                this.board.player.handleInput(uinp.input);
+                const command = this.inputHandler.handleInput(uinp.input);
+                command && command(this.board.player);
               }
             }
           }
@@ -131,11 +130,6 @@ export class Game {
     document.body.appendChild(this.fps);
   }
 
-  private handleKeyboardEvent(evt: KeyboardEvent) {
-    // evt.preventDefault();
-    this.pressedKey[evt.key.toLowerCase()] = evt.type == "keydown";
-  }
-
   private update() {
     const nowTs = +new Date();
     const lastTs = this.lastTs || nowTs;
@@ -150,12 +144,7 @@ export class Game {
       this.fc = 0;
     }
 
-    const actions = [];
-    if (this.pressedKey.w) actions.push(Action.Up);
-    if (this.pressedKey.d) actions.push(Action.Right);
-    if (this.pressedKey.s) actions.push(Action.Down);
-    if (this.pressedKey.a) actions.push(Action.Left);
-
+    const actions = this.inputHandler.getAction();
     const input = actions.length > 0 ? { actions, dt } : null;
     this.board.update(input);
 
