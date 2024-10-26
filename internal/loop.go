@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	updatesPerSec int = 60
+	updatesPerSec int = 40
 )
 
 type ClientConnected struct {
@@ -61,6 +61,7 @@ func StartGameLoop(eventCh <-chan any) {
 
 				if command := inputHandler.HandleInput(&input); command != nil {
 					command(player)
+					CheckCollision(&player.Entity, board.Walls)
 				}
 
 				client.SetProcessedInput(&input)

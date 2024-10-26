@@ -35,8 +35,11 @@ export class Game {
 
   unprocessedInputs: unprocessedInput[] = [];
   conn: WebSocket;
-  updateRate = 50;
+  updateRate = 30;
   lastTs: number;
+
+  s_pos = document.createElement("div");
+  c_pos = document.createElement("div");
 
   async start() {
     this.board = new Board(1000, 600, this.inputHandler);
@@ -64,6 +67,8 @@ export class Game {
             "red",
           );
         }
+
+        this.s_pos.innerHTML = `Server: x:${player.x}, y:${player.y}`;
 
         if (data.processedInput === null) continue;
 
@@ -128,6 +133,8 @@ export class Game {
     wrapper.appendChild(this.board.canvas);
     document.body.replaceChildren(wrapper);
     document.body.appendChild(this.fps);
+    document.body.appendChild(this.c_pos);
+    document.body.appendChild(this.s_pos);
   }
 
   private update() {
@@ -147,6 +154,7 @@ export class Game {
     const actions = this.inputHandler.getAction();
     const input = actions.length > 0 ? { actions, dt } : null;
     this.board.update(input);
+    this.c_pos.innerHTML = `Client: x:${this.board.player.position.x}, y:${this.board.player.position.y}`;
 
     if (input != null) {
       const last_uinp =

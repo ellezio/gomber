@@ -50,7 +50,7 @@ func (b *Board) LoadMap(mapName string) {
 				case MapWall:
 					x := float64(j * blockWidth)
 					y := float64((i - 1) * blockHeight)
-					wall := entity.NewWall(x, y, blockWidth, blockHeight)
+					wall := entity.NewWall(x, y, float64(blockWidth), float64(blockHeight))
 					b.AddWall(wall)
 				}
 			}

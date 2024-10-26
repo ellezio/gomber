@@ -65,7 +65,8 @@ func (h *InputHandler) HandleInput(input *Input) Command {
 
 func move(dt float64, dX float64, dY float64) Command {
 	return func(p *entity.Player) {
-
+		p.PrevX = p.X
+		p.PrevY = p.Y
 		p.X += toFixed(dX*dt*p.Speed, 4)
 		p.Y += toFixed(dY*dt*p.Speed, 4)
 	}
