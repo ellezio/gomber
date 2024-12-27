@@ -1,27 +1,37 @@
-import { Board } from "./board";
-import { position, size } from "./entities/entity";
+import { Board, TileType } from "./board";
+import { Bomb } from "./entities/bomb";
+import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
-import { Wall } from "./entities/wall";
 import { Action, InputHandler, unprocessedInput } from "./input";
 
 type entityInMsg = {
   id: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  pos: { x: number; y: number };
+  aabb: { min: { x: number; y: number }; max: { x: number; y: number } };
 };
 
-type playerInMsg = entityInMsg & {
+export type playerInMsg = entityInMsg & {
   speed: number;
+  maxBombs: number;
+  availableBombs: number;
+  hp: number;
 };
+
+type bombInMsg = entityInMsg & {
+  cd: number;
+};
+
+type powerUpInMsg = entityInMsg;
 
 type boardUpdateMessage = {
   controlledEntityId: number;
   processedInput: { id: number; actions: Action[]; dt: number };
   board: {
+    grid: TileType[][];
     players: playerInMsg[];
-    walls: entityInMsg[];
+    bombs: bombInMsg[];
+    explosions: entityInMsg[];
+    powerups: powerUpInMsg[];
   };
 };
 
@@ -32,14 +42,15 @@ export class Game {
   fps = document.createElement("div");
   fc = 0;
   dtSum = 0;
+  explosionDtSum = 0;
 
   unprocessedInputs: unprocessedInput[] = [];
   conn: WebSocket;
   updateRate = 30;
   lastTs: number;
 
-  s_pos = document.createElement("div");
-  c_pos = document.createElement("div");
+  bombs = document.createElement("div");
+  hp = document.createElement("div");
 
   async start() {
     this.board = new Board(1000, 600, this.inputHandler);
@@ -59,70 +70,91 @@ export class Game {
     for (const player of data.board.players) {
       if (player.id === data.controlledEntityId) {
         if (this.board.player === undefined) {
-          this.board.player = new Player(
-            player.id,
-            { x: player.x, y: player.y },
-            { width: player.w, height: player.h },
-            player.speed,
-            "red",
-          );
+          this.board.player = Player.fromMessage(player);
         }
 
-        this.s_pos.innerHTML = `Server: x:${player.x}, y:${player.y}`;
-
-        if (data.processedInput === null) continue;
+        // if (data.processedInput === null) continue;
 
         const processingInput = this.unprocessedInputs.shift();
-        if (processingInput !== undefined) {
-          if (processingInput.inputId !== data.processedInput.id) {
-            this.unprocessedInputs.length = 0;
-            this.board.player.position.x = player.x;
-            this.board.player.position.y = player.y;
-            this.board.player.speed = player.speed;
-          } else {
-            if (
-              processingInput.x !== player.x ||
-              processingInput.y !== player.y ||
-              processingInput.speed !== player.speed
-            ) {
-              this.board.player.position.x = player.x;
-              this.board.player.position.y = player.y;
-              this.board.player.speed = player.speed;
-              for (const uinp of this.unprocessedInputs) {
-                const command = this.inputHandler.handleInput(uinp.input);
-                command && command(this.board.player);
-              }
-            }
-          }
-        }
+        this.board.player.updateFromMessage(player);
+        // if (processingInput !== undefined) {
+        //   if (processingInput.inputId !== data.processedInput.id) {
+        //     this.unprocessedInputs.length = 0;
+        //     this.board.player.position.x = player.pos.x;
+        //     this.board.player.position.y = player.pos.y;
+        //     this.board.player.speed = player.speed;
+        //   } else {
+        //     if (
+        //       processingInput.x !== player.pos.x ||
+        //       processingInput.y !== player.pos.y ||
+        //       processingInput.speed !== player.speed
+        //     ) {
+        //       this.board.player.position.x = player.pos.x;
+        //       this.board.player.position.y = player.pos.y;
+        //       this.board.player.speed = player.speed;
+        //       for (const uinp of this.unprocessedInputs) {
+        //         const command = this.inputHandler.handleInput(uinp.input);
+        //         command && command(this.board.player);
+        //       }
+        //     }
+        //   }
+        // }
       } else {
-        const obj = this.board.entities.find(
-          (obj) => obj.id === player.id,
-        ) as Player;
-        if (obj !== undefined) {
-          obj.position.x = player.x;
-          obj.position.y = player.y;
-          obj.speed = player.speed;
-        } else {
-          const newPlayer = new Player(
-            player.id,
-            { x: player.x, y: player.y },
-            { width: player.w, height: player.h },
-            player.speed,
-            "green",
-          );
-          this.board.entities.push(newPlayer);
-        }
+        // const obj = this.board.entities.find(
+        //   (obj) => obj.id === player.id,
+        // ) as Player;
+        // if (obj !== undefined) {
+        //   obj.position.x = player.pos.x;
+        //   obj.position.y = player.pos.y;
+        //   obj.speed = player.speed;
+        // } else {
+        //   const newPlayer = Player.fromMessage(player);
+        //   this.board.entities.push(newPlayer);
+        // }
       }
     }
 
-    if (this.board.entities.length < (data.board.walls?.length ?? 0)) {
-      this.board.entities = [];
-      for (const wall of data.board.walls) {
-        const pos = { x: wall.x, y: wall.y } as position;
-        const size = { width: wall.w, height: wall.h } as size;
-        this.board.entities.push(new Wall(0, pos, size, "blue"));
-      }
+    this.board.entities = data.board.players
+      .filter((p) => p.id !== data.controlledEntityId)
+      .map((p) => Player.fromMessage(p));
+
+    this.board.bombs =
+      data.board.bombs?.map((b) => {
+        const bomb = new Bomb(
+          b.id,
+          b.pos,
+          { width: b.aabb.max.x, height: b.aabb.max.y },
+          "white",
+        );
+        bomb.countDown = b.cd;
+        return bomb;
+      }) ?? [];
+
+    data.board.explosions?.forEach((e) => {
+      this.board.explosions.push(
+        new Entity(
+          e.id,
+          e.pos,
+          { width: e.aabb.max.x, height: e.aabb.max.y },
+          "yellow",
+        ),
+      );
+    });
+
+    this.board.powerups =
+      data.board.powerups?.map((e) => {
+        return new Entity(
+          e.id,
+          e.pos,
+          { width: e.aabb.max.x, height: e.aabb.max.y },
+          "purple",
+        );
+      }) ?? [];
+
+    if (this.board.grid === undefined) {
+      this.board.setGrid(data.board.grid);
+    } else {
+      this.board.updateGrid(data.board.grid);
     }
   }
 
@@ -133,8 +165,8 @@ export class Game {
     wrapper.appendChild(this.board.canvas);
     document.body.replaceChildren(wrapper);
     document.body.appendChild(this.fps);
-    document.body.appendChild(this.c_pos);
-    document.body.appendChild(this.s_pos);
+    document.body.appendChild(this.bombs);
+    document.body.appendChild(this.hp);
   }
 
   private update() {
@@ -143,18 +175,32 @@ export class Game {
     const dt = (nowTs - lastTs) / 1000;
     this.lastTs = nowTs;
 
-    this.fc++;
     this.dtSum += dt;
     if (this.dtSum >= 1) {
       this.fps.innerHTML = this.fc + " fps";
       this.dtSum = 0;
       this.fc = 0;
+    } else {
+      this.fc++;
     }
+
+    this.bombs.innerHTML =
+      "Bombs: " +
+      this.board.player.availableBombs +
+      "/" +
+      this.board.player.maxBombs;
+
+    this.hp.innerHTML = this.board.player.hp + " HP";
 
     const actions = this.inputHandler.getAction();
     const input = actions.length > 0 ? { actions, dt } : null;
     this.board.update(input);
-    this.c_pos.innerHTML = `Client: x:${this.board.player.position.x}, y:${this.board.player.position.y}`;
+
+    this.explosionDtSum += dt;
+    if (this.explosionDtSum >= 0.3) {
+      this.explosionDtSum = 0;
+      this.board.explosions = [];
+    }
 
     if (input != null) {
       const last_uinp =

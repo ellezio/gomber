@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"os"
 
-	game "github.com/ellezio/gomber/internal"
+	"github.com/ellezio/gomber/internal/game"
 )
 
 func main() {
-	eventCh := make(chan any)
+	eventCh := make(chan game.ClientEvent)
 	log := log.New(os.Stdout, "", 0)
 
+	game := game.NewGame(eventCh)
+	go game.Run("board1")
+
 	setupRoutes(eventCh, log)
-	go game.StartGameLoop(eventCh)
 
 	fmt.Println("Listening on :3000")
 	http.ListenAndServe(":3000", nil)

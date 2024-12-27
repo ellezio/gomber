@@ -4,11 +4,11 @@ import (
 	"log"
 	"net/http"
 
-	game "github.com/ellezio/gomber/internal"
+	"github.com/ellezio/gomber/internal/game"
 	"github.com/gorilla/websocket"
 )
 
-func setupRoutes(eventCh chan<- any, log *log.Logger) {
+func setupRoutes(eventCh chan<- game.ClientEvent, log *log.Logger) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/index.html")
 	})
@@ -26,11 +26,35 @@ func setupRoutes(eventCh chan<- any, log *log.Logger) {
 
 		client := game.NewClient(conn, log)
 
-		eventCh <- game.ClientConnected{Client: client}
-		eventCh <- game.PlayerCreation{Client: client}
+		clientCh := make(chan any)
+		done := make(chan bool)
 
-		client.ListenForInput()
+		go func() {
+			for {
+				select {
+				case <-done:
+					break
+				case msg := <-clientCh:
+					err := client.SendMessage(msg)
+					if err != nil {
+						log.Println(err)
+					}
+				}
+			}
+		}()
 
-		eventCh <- game.ClientDisconnected{Client: client}
+		clientIdCh := make(chan int)
+		eventCh <- game.ClientConnectedEvent{IdCh: clientIdCh, ClientCh: clientCh}
+		id := <-clientIdCh
+
+		client.ListenForInput(func(input game.Input) {
+			eventCh <- game.ClientInputEvent{
+				Id:    id,
+				Input: input,
+			}
+		})
+
+		eventCh <- game.ClientLeftEvent{Id: id}
+		done <- true
 	})
 }
