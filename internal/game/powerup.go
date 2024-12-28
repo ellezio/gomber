@@ -5,12 +5,12 @@ import "github.com/ellezio/gomber/internal/math2"
 func newPowerUp(pos math2.Vector2) *PowerUp {
 	return &PowerUp{
 		Entity: Entity{
-			Id:      0,
-			Tag:     "powerup",
-			Pos:     pos,
-			PrevPos: pos,
-			AABB:    *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize/2, TileSize/2)),
-			Active:  true,
+			Id:       0,
+			Tag:      "powerup",
+			Pos:      pos,
+			Velocity: *math2.NewZeroVector2(),
+			AABB:     *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize/2, TileSize/2)),
+			Active:   true,
 		},
 	}
 }

@@ -12,10 +12,8 @@ func DynamicEntityVsEntity(source, target *Entity) (contactPoint *math2.Vector2,
 		AddVector2(&target.Pos).
 		ExpandByVector2(source.AABB.Max.Clone().Div(2))
 
-	sourceStart := source.PrevPos.Clone().AddVector2(source.AABB.Max.Clone().Div(2))
-	sourceEnd := source.Pos.Clone().AddVector2(source.AABB.Max.Clone().Div(2))
-	direction := sourceEnd.Clone().SubVector2(sourceStart)
-	ray := math2.NewRay(*sourceStart, *direction)
+	sourceStart := source.Pos.Clone().AddVector2(source.AABB.Max.Clone().Div(2))
+	ray := math2.NewRay(*sourceStart, source.Velocity)
 
 	return RayVsBox2(*ray, *targetCollisionBorder)
 }

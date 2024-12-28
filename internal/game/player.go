@@ -21,12 +21,12 @@ type Player struct {
 func NewPlayer() *Player {
 	return &Player{
 		Entity: Entity{
-			Id:      0,
-			Tag:     "player",
-			Pos:     *math2.NewVector2(60, 60),
-			PrevPos: *math2.NewVector2(60, 60),
-			AABB:    *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(30, 30)),
-			Active:  true,
+			Id:       0,
+			Tag:      "player",
+			Pos:      *math2.NewVector2(60, 60),
+			Velocity: *math2.NewZeroVector2(),
+			AABB:     *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(30, 30)),
+			Active:   true,
 		},
 		Speed: 120,
 
@@ -39,6 +39,9 @@ func NewPlayer() *Player {
 }
 
 func (p *Player) Update(dt float32) {
+	p.Pos.AddVector2(&p.Velocity)
+	p.Velocity = *math2.NewZeroVector2()
+
 	if p.freezeDropBomb {
 		p.freezeDtSum += dt
 		if p.freezeDtSum >= 0.2 {

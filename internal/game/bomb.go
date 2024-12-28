@@ -18,12 +18,12 @@ type Bomb struct {
 func NewBomb(x float32, y float32, explosionRange int) *Bomb {
 	return &Bomb{
 		Entity: Entity{
-			Id:      0,
-			Tag:     "bomb",
-			Pos:     *math2.NewVector2(x, y),
-			PrevPos: *math2.NewVector2(x, y),
-			AABB:    *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize, TileSize)),
-			Active:  true,
+			Id:       0,
+			Tag:      "bomb",
+			Pos:      *math2.NewVector2(x, y),
+			Velocity: *math2.NewZeroVector2(),
+			AABB:     *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize, TileSize)),
+			Active:   true,
 		},
 		CountDown:      3,
 		explosionRange: explosionRange,

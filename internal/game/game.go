@@ -105,10 +105,10 @@ func (g *Game) Run(mapName string) {
 			lastTs = nowTs
 			dt := nowTs.Sub(tempTs).Seconds()
 
-			g.handleInput()
-			g.update(float32(dt))
+			g.handleInput(float32(dt))
 			g.removeEntities()
 			g.checkCollision()
+			g.update(float32(dt))
 
 			for _, client := range g.clients {
 				client.clientCh <- struct {
@@ -127,7 +127,7 @@ func (g *Game) Run(mapName string) {
 	}
 }
 
-func (g *Game) handleInput() {
+func (g *Game) handleInput(dt float32) {
 	for _, client := range g.clients {
 		if len(client.inputs) == 0 {
 			continue
@@ -138,7 +138,7 @@ func (g *Game) handleInput() {
 
 		if commands := g.inputHandler.HandleInput(input); commands != nil {
 			for _, command := range commands {
-				command(client.controlledEntity)
+				command(client.controlledEntity, dt)
 			}
 		}
 
@@ -169,14 +169,14 @@ func (g *Game) update(dt float32) {
 func (g *Game) checkCollision() {
 	for _, player := range g.Players {
 		if player.Active {
-			playerPosition := player.Pos
+			playerVelocity := player.Velocity
 			g.playerVsObstacles(player)
 
 			// NOTE after resolving the collision it happens to jump to an another collision when on high speed
 			//		so there is a need to detect and resolve the new collision
 			//
 			// TODO find another approach to reslove this case
-			if playerPosition.X != player.Pos.X || playerPosition.Y != player.Pos.Y {
+			if playerVelocity.X != player.Velocity.X || playerVelocity.Y != player.Velocity.Y {
 				g.playerVsObstacles(player)
 			}
 
@@ -188,18 +188,20 @@ func (g *Game) checkCollision() {
 }
 
 func BroadphaseBox(player *Player) *math2.Box2 {
-	box2 := player.AABB.Clone().AddVector2(&player.Pos)
-	ppBox2 := player.AABB.Clone().AddVector2(&player.PrevPos)
+	newPos := player.Pos.Clone().AddVector2(&player.Velocity)
 
-	if player.Pos.X > player.PrevPos.X {
+	ppBox2 := player.AABB.Clone().AddVector2(&player.Pos)
+	box2 := player.AABB.Clone().AddVector2(newPos)
+
+	if newPos.X > player.Pos.X {
 		box2.Min.X = ppBox2.Min.X
-	} else if player.Pos.X < player.PrevPos.X {
+	} else if newPos.X < player.Pos.X {
 		box2.Max.X = ppBox2.Max.X
 	}
 
-	if player.Pos.Y > player.PrevPos.Y {
+	if newPos.Y > player.Pos.Y {
 		box2.Min.Y = ppBox2.Min.Y
-	} else if player.Pos.Y < player.PrevPos.Y {
+	} else if newPos.Y < player.Pos.Y {
 		box2.Max.Y = ppBox2.Max.Y
 	}
 
@@ -267,7 +269,7 @@ func (g *Game) playerVsObstacles(player *Player) {
 	})
 
 	for _, c := range collisions {
-		cp, cn, _ := DynamicEntityVsEntity(&player.Entity, c.value)
+		cp, cn, ct := DynamicEntityVsEntity(&player.Entity, c.value)
 
 		if cp == nil {
 			continue
@@ -276,11 +278,13 @@ func (g *Game) playerVsObstacles(player *Player) {
 		cn.Mul(0.1)
 
 		if cn.X != 0 {
-			player.Pos.X = cp.X - player.AABB.Max.X/2 + cn.X
+			player.Velocity.X *= ct
+			player.Velocity.X += cn.X
 		}
 
 		if cn.Y != 0 {
-			player.Pos.Y = cp.Y - player.AABB.Max.Y/2 + cn.Y
+			player.Velocity.Y *= ct
+			player.Velocity.Y += cn.Y
 		}
 	}
 }
