@@ -7,6 +7,14 @@ import (
 	"github.com/ellezio/gomber/internal/math2"
 )
 
+// NOTE:
+// This input handler is only for controling playable entity
+// not for interaction with other game elements.
+// I'm planning to do chain-of-responsibility for that.
+//
+// And handling playable entity will be done in component
+// prepared for that.
+
 type action = string
 
 const (
@@ -39,6 +47,10 @@ type InputHandler struct {
 }
 
 func (h *InputHandler) HandleInput(input *Input) []Command {
+	// This is for queuing all action performed
+	// by player to take place. It makes possible
+	// to place bomb while still moving by adding
+	// both commands.
 	var commands []Command
 
 	if input.hasAction(DropBomb) {

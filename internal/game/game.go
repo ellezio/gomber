@@ -17,6 +17,8 @@ const (
 	TileSize = 50
 )
 
+// TODO:
+// to place where all game objects will be
 type TileType int
 
 const (
@@ -26,14 +28,22 @@ const (
 )
 
 type GameClient struct {
-	isDisconnected   bool
+	isDisconnected bool
+	// I thinking about giving a player ability to
+	// swap in game controlle over entity
 	controlledEntity *Player
 	clientCh         chan<- any
 
-	inputs         []Input
+	// queue for input yet to be processed
+	inputs []Input
+	// input that was just processed which will be sent to client
+	// in order to inform about which input was involved into generating new state of game
 	processedInput *Input
 }
 
+// TODO:
+// think about something more self describing
+// type then just `any`
 type ClientEvent any
 type ClientConnectedEvent struct {
 	IdCh     chan<- int
@@ -61,18 +71,6 @@ type GameState struct {
 	bombGrid [][]int
 }
 
-func NewGame(clientsEventsCh <-chan ClientEvent) *Game {
-	game := &Game{
-		clients:         make(map[int]*GameClient),
-		clientsEventsCh: clientsEventsCh,
-	}
-
-	inputHandler := NewInputHandler(game)
-
-	game.inputHandler = inputHandler
-	return game
-}
-
 type SpawnPoint struct {
 	math2.Vector2
 	player *Player
@@ -88,6 +86,18 @@ type Game struct {
 	inputHandler    *InputHandler
 	lastId          int
 	toRemove        []*Entity
+}
+
+func NewGame(clientsEventsCh <-chan ClientEvent) *Game {
+	game := &Game{
+		clients:         make(map[int]*GameClient),
+		clientsEventsCh: clientsEventsCh,
+	}
+
+	inputHandler := NewInputHandler(game)
+
+	game.inputHandler = inputHandler
+	return game
 }
 
 func (g *Game) Run(mapName string) {
@@ -172,10 +182,12 @@ func (g *Game) checkCollision() {
 			playerVelocity := player.Velocity
 			g.playerVsObstacles(player)
 
-			// NOTE after resolving the collision it happens to jump to an another collision when on high speed
-			//		so there is a need to detect and resolve the new collision
+			// NOTE:
+			// after resolving the collision it happens to jump to an another collision when on high speed
+			// so there is a need to detect and resolve the new collision
 			//
-			// TODO find another approach to reslove this case
+			// TODO (I don't think this is needed now):
+			// find another approach to reslove this case
 			if playerVelocity.X != player.Velocity.X || playerVelocity.Y != player.Velocity.Y {
 				g.playerVsObstacles(player)
 			}
@@ -387,12 +399,14 @@ func (g *Game) handleClientEvent(event ClientEvent) {
 	}
 }
 
+// handles client's id generation and instantiate player's entity
 func (g *Game) addClient(clientCh chan<- any) int {
 	id := g.generateId()
 
 	player := NewPlayer()
 	g.Instantiate(player)
 
+	// Pick empty spown point and place player in center of it
 	for i, spawn := range g.playerSpawns {
 		if spawn.player != nil {
 			continue
@@ -418,6 +432,7 @@ func (g *Game) addClient(clientCh chan<- any) int {
 	return id
 }
 
+// TODO: reconnecting
 func (g *Game) clientDisconnected(id int) {
 	g.clients[id].isDisconnected = true
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func setupRoutes(eventCh chan<- game.ClientEvent, log *log.Logger) {
+func setupRoutes(eventCh chan<- game.ClientEvent) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/index.html")
 	})
@@ -24,16 +24,19 @@ func setupRoutes(eventCh chan<- game.ClientEvent, log *log.Logger) {
 			return
 		}
 
-		client := game.NewClient(conn, log)
+		client := game.NewClient(conn, log.Default())
 
+		// channel for game to communicate with client
 		clientCh := make(chan any)
 		done := make(chan bool)
 
+		// loop for reveiving message from game
+		// and sending them to client
 		go func() {
 			for {
 				select {
 				case <-done:
-					break
+					return
 				case msg := <-clientCh:
 					err := client.SendMessage(msg)
 					if err != nil {
