@@ -3,6 +3,7 @@ import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
 import { Action, InputHandler, unprocessedInput } from "./input";
+import { lobbyState } from "./lobby";
 
 type entityInMsg = {
   id: number;
@@ -23,7 +24,7 @@ type bombInMsg = entityInMsg & {
 
 type powerUpInMsg = entityInMsg;
 
-type boardUpdateMessage = {
+export type boardUpdateMessage = {
   controlledEntityId: number;
   processedInput: { id: number; actions: Action[]; dt: number };
   board: {
@@ -34,6 +35,13 @@ type boardUpdateMessage = {
     powerups: powerUpInMsg[];
   };
 };
+
+type ServerMessage =
+  | boardUpdateMessage
+  | {
+      type: "lobbyState";
+      details: lobbyState;
+    };
 
 export class Game {
   board: Board;
@@ -56,17 +64,15 @@ export class Game {
     this.board = new Board(1000, 600, this.inputHandler);
     this.populateDOM();
 
-    this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
-    this.conn.onmessage = this.messageHandler.bind(this);
+    // this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
+    // this.conn.onmessage = this.handleMessage.bind(this);
 
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
     setInterval(() => this.update(), 1000 / this.updateRate);
   }
 
-  private messageHandler(evt: MessageEvent<any>) {
-    const data: boardUpdateMessage = JSON.parse(evt.data);
-
+  public handleMessage(data: boardUpdateMessage) {
     for (const player of data.board.players) {
       if (player.id === data.controlledEntityId) {
         if (this.board.player === undefined) {

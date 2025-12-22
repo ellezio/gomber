@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-
-	"github.com/ellezio/gomber/internal/game"
 )
 
 func main() {
@@ -13,18 +11,18 @@ func main() {
 	flag.Parse()
 
 	// through this channel client send events to game server
-	eventCh := make(chan game.ClientEvent)
+	// eventCh := make(chan game.ClientEvent)
 
-	game := game.NewGame(eventCh)
+	// game := game.NewGame(eventCh)
 
 	// Currently when server starts
 	// the game start with board loaded
 	// and ready to play.
 	// In futre there will be menu to create
 	// game with choosen board.
-	go game.Run("board1")
+	// go game.Run("board1")
 
-	setupRoutes(eventCh)
+	setupRoutes()
 
 	fmt.Printf("Listening on :%s\n", *port)
 	http.ListenAndServe(fmt.Sprintf(":%s", *port), nil)

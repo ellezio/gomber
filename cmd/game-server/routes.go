@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"log"
 	"net/http"
 
@@ -8,7 +9,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func setupRoutes(eventCh chan<- game.ClientEvent) {
+var lobby *game.Lobby = game.NewLobby("unsafe test lobby")
+var eventCh = make(chan game.ClientEvent)
+
+func setupRoutes() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/index.html")
 	})
@@ -24,7 +28,7 @@ func setupRoutes(eventCh chan<- game.ClientEvent) {
 			return
 		}
 
-		client := game.NewClient(conn, log.Default())
+		client := game.NewClient(conn)
 
 		// channel for game to communicate with client
 		clientCh := make(chan any)
@@ -46,18 +50,49 @@ func setupRoutes(eventCh chan<- game.ClientEvent) {
 			}
 		}()
 
-		clientIdCh := make(chan int)
-		eventCh <- game.ClientConnectedEvent{IdCh: clientIdCh, ClientCh: clientCh}
-		id := <-clientIdCh
+		var handler game.LobbyHandler
 
-		client.ListenForInput(func(input game.Input) {
-			eventCh <- game.ClientInputEvent{
-				Id:    id,
-				Input: input,
+		// var g *game.Game
+		// var id int
+		client.Serve(func(p []byte) {
+			if bytes.Equal(p, []byte("lobby:connect")) {
+				handler = lobby.AddClient(clientCh, client)
+				handler.RequestState()
+			} else if bytes.Equal(p, []byte("game:start")) {
+				handler.RunGame()
+				// g = game.NewGame(eventCh)
+				// go g.Run("board1")
+				// clientIdCh := make(chan int)
+				// eventCh <- game.ClientConnectedEvent{IdCh: clientIdCh, ClientCh: clientCh}
+				// id = <-clientIdCh
+			} else {
+				handler.HandleInput(p)
+				// input := game.Input{}
+				// err = json.Unmarshal(p, &input)
+				// if err != nil {
+				// 	log.Println(err)
+				// 	return
+				// }
+				// eventCh <- game.ClientInputEvent{
+				// 	Id:    id,
+				// 	Input: input,
+				// }
 			}
 		})
 
-		eventCh <- game.ClientLeftEvent{Id: id}
+		// clientIdCh := make(chan int)
+		// eventCh <- game.ClientConnectedEvent{IdCh: clientIdCh, ClientCh: clientCh}
+		// id := <-clientIdCh
+
+		// client.ListenForInput(func(input game.Input) {
+		// eventCh <- game.ClientInputEvent{
+		// 	Id:    id,
+		// 	Input: input,
+		// }
+		// })
+
+		// eventCh <- game.ClientLeftEvent{Id: id}
+		handler.Disconnect()
 		done <- true
 	})
 }
