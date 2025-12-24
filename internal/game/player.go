@@ -39,6 +39,11 @@ func NewPlayer() *Player {
 }
 
 func (p *Player) Update(dt float32) {
+	if p.HP <= 0 {
+		p.Active = false
+		return
+	}
+
 	p.Pos.AddVector2(&p.Velocity)
 	p.Velocity = *math2.NewZeroVector2()
 

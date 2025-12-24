@@ -9,6 +9,7 @@ type entityInMsg = {
   id: number;
   pos: { x: number; y: number };
   aabb: { min: { x: number; y: number }; max: { x: number; y: number } };
+  active: boolean;
 };
 
 export type playerInMsg = entityInMsg & {
@@ -131,6 +132,7 @@ export class Game {
           b.pos,
           { width: b.aabb.max.x, height: b.aabb.max.y },
           "white",
+          b.active,
         );
         bomb.countDown = b.cd;
         return bomb;
@@ -143,6 +145,7 @@ export class Game {
           e.pos,
           { width: e.aabb.max.x, height: e.aabb.max.y },
           "yellow",
+          e.active,
         ),
       );
     });
@@ -154,6 +157,7 @@ export class Game {
           e.pos,
           { width: e.aabb.max.x, height: e.aabb.max.y },
           "purple",
+          e.active,
         );
       }) ?? [];
 
@@ -198,8 +202,11 @@ export class Game {
 
     this.hp.innerHTML = this.board.player.hp + " HP";
 
-    const actions = this.inputHandler.getAction();
-    const input = actions.length > 0 ? { actions, dt } : null;
+    let input: { actions: Action[]; dt: number } | null = null;
+    if (this.board.player.active) {
+      const actions = this.inputHandler.getAction();
+      input = actions.length > 0 ? { actions, dt } : null;
+    }
     this.board.update(input);
 
     this.explosionDtSum += dt;

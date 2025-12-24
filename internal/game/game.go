@@ -46,7 +46,8 @@ type GameClient struct {
 // type then just `any`
 type ClientEvent any
 type ClientConnectedEvent struct {
-	IdCh     chan<- int
+	// IdCh     chan<- int
+	ClientId int
 	ClientCh chan<- any
 }
 type ClientDisconnectedEvent struct {
@@ -76,6 +77,10 @@ type SpawnPoint struct {
 	player *Player
 }
 
+type GameResult struct {
+	winnerId int
+}
+
 type Game struct {
 	GameState
 
@@ -86,6 +91,7 @@ type Game struct {
 	inputHandler    *InputHandler
 	lastId          int
 	toRemove        []*Entity
+	over            bool
 }
 
 func NewGame(clientsEventsCh <-chan ClientEvent) *Game {
@@ -100,7 +106,7 @@ func NewGame(clientsEventsCh <-chan ClientEvent) *Game {
 	return game
 }
 
-func (g *Game) Run(mapName string) {
+func (g *Game) Run(mapName string) GameResult {
 	g.LoadMap(mapName)
 
 	ticker := time.NewTicker(time.Second / time.Duration(updatesRate))
@@ -119,6 +125,17 @@ func (g *Game) Run(mapName string) {
 			g.removeEntities()
 			g.checkCollision()
 			g.update(float32(dt))
+
+			if g.over {
+				gr := GameResult{}
+				for i, c := range g.clients {
+					if c.controlledEntity.Active {
+						gr.winnerId = i
+						break
+					}
+				}
+				return gr
+			}
 
 			for _, client := range g.clients {
 				client.clientCh <- struct {
@@ -157,10 +174,16 @@ func (g *Game) handleInput(dt float32) {
 }
 
 func (g *Game) update(dt float32) {
+	live := 0
 	for _, player := range g.Players {
 		if player.Active {
+			live++
 			player.Update(dt)
 		}
+	}
+
+	if live <= 1 {
+		g.over = true
 	}
 
 	for _, explosion := range g.Explosions {
@@ -385,8 +408,7 @@ func (g *Game) playerVsCollectable(player *Player) {
 func (g *Game) handleClientEvent(event ClientEvent) {
 	switch data := event.(type) {
 	case ClientConnectedEvent:
-		id := g.addClient(data.ClientCh)
-		data.IdCh <- id
+		g.addClient(data.ClientId, data.ClientCh)
 
 	case ClientDisconnectedEvent:
 		g.clientDisconnected(data.Id)
@@ -395,14 +417,14 @@ func (g *Game) handleClientEvent(event ClientEvent) {
 		g.removeClient(data.Id)
 
 	case ClientInputEvent:
-		g.clients[data.Id].inputs = append(g.clients[data.Id].inputs, data.Input)
+		if g.clients[data.Id].controlledEntity.Active {
+			g.clients[data.Id].inputs = append(g.clients[data.Id].inputs, data.Input)
+		}
 	}
 }
 
 // handles client's id generation and instantiate player's entity
-func (g *Game) addClient(clientCh chan<- any) int {
-	id := g.generateId()
-
+func (g *Game) addClient(clientId int, clientCh chan<- any) {
 	player := NewPlayer()
 	g.Instantiate(player)
 
@@ -423,13 +445,11 @@ func (g *Game) addClient(clientCh chan<- any) int {
 		break
 	}
 
-	g.clients[id] = &GameClient{
+	g.clients[clientId] = &GameClient{
 		isDisconnected:   false,
 		clientCh:         clientCh,
 		controlledEntity: player,
 	}
-
-	return id
 }
 
 // TODO: reconnecting

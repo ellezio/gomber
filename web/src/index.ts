@@ -29,6 +29,9 @@ class Client {
     if ("type" in data) {
       switch (data.type) {
         case "lobbyState":
+          if (this.game != null) {
+            this.game = null;
+          }
           this.lobby?.handleMessage(data.details);
           break;
         case "ok":

@@ -7,12 +7,13 @@ export class Player extends Entity {
     position: position,
     size: size,
     color: string,
+    active: boolean,
     public speed: number,
     public maxBombs: number,
     public availableBombs: number,
     public hp: number,
   ) {
-    super(id, position, size, color);
+    super(id, position, size, color, active);
     this.prevPosition = position;
   }
 
@@ -28,6 +29,7 @@ export class Player extends Entity {
         height: playerMsg.aabb.max.y - playerMsg.aabb.min.y + 1,
       },
       "green",
+      playerMsg.active,
       playerMsg.speed,
       playerMsg.maxBombs,
       playerMsg.availableBombs,
@@ -44,6 +46,7 @@ export class Player extends Entity {
     this.maxBombs = playerMsg.maxBombs;
     this.availableBombs = playerMsg.availableBombs;
     this.hp = playerMsg.hp;
+    this.active = playerMsg.active;
   }
 
   update(ctx: CanvasRenderingContext2D): void {

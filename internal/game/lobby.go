@@ -8,7 +8,7 @@ import (
 )
 
 type LobbyClient struct {
-	id     int64
+	id     int
 	ch     chan<- any
 	client *Client
 
@@ -22,7 +22,7 @@ type LobbyState struct {
 
 type Lobby struct {
 	name    string
-	clients map[int64]LobbyClient
+	clients map[int]LobbyClient
 	lastId  atomic.Int64
 	mu      sync.RWMutex
 
@@ -34,13 +34,13 @@ type Lobby struct {
 func NewLobby(name string) *Lobby {
 	return &Lobby{
 		name:    name,
-		clients: map[int64]LobbyClient{},
+		clients: map[int]LobbyClient{},
 		eventCh: make(chan ClientEvent),
 	}
 }
 
 func (l *Lobby) AddClient(clientCh chan<- any, client *Client) LobbyHandler {
-	lc := LobbyClient{ch: clientCh, id: l.lastId.Add(1), client: client}
+	lc := LobbyClient{ch: clientCh, id: int(l.lastId.Add(1)), client: client}
 	if len(l.clients) == 0 {
 		lc.Admin = true
 	}
@@ -69,7 +69,7 @@ func (l *Lobby) AddClient(clientCh chan<- any, client *Client) LobbyHandler {
 	return lh
 }
 
-func (l *Lobby) RemoveClient(clientId int64) {
+func (l *Lobby) RemoveClient(clientId int) {
 	l.mu.Lock()
 	delete(l.clients, clientId)
 	l.mu.Unlock()
@@ -87,27 +87,43 @@ func (l *Lobby) RemoveClient(clientId int64) {
 
 func (l *Lobby) SetMap(mapName string) {}
 
-func (l *Lobby) RunGame(clientId int64) int64 {
+func (l *Lobby) RunGame(clientId int) {
+	for len(l.eventCh) > 0 {
+		<-l.eventCh
+	}
+
 	l.game = NewGame(l.eventCh)
-	go l.game.Run("board1")
-	return l.ConnectToGame(clientId)
+	go func() {
+		gr := l.game.Run("board1")
+		log.Println(gr)
+		l.game = nil
+		ls := l.State()
+		l.mu.Lock()
+		for _, c := range l.clients {
+			c.ch <- ls
+		}
+		l.mu.Unlock()
+	}()
+
+	l.mu.Lock()
+	for _, c := range l.clients {
+		l.eventCh <- ClientConnectedEvent{ClientId: c.id, ClientCh: c.ch}
+	}
+	l.mu.Unlock()
 }
 
-func (l *Lobby) ConnectToGame(clientId int64) int64 {
+func (l *Lobby) ConnectToGame(clientId int) {
 	l.mu.RLock()
 	client := l.clients[clientId]
 	l.mu.RUnlock()
 
-	clientIdCh := make(chan int)
-	l.eventCh <- ClientConnectedEvent{IdCh: clientIdCh, ClientCh: client.ch}
-	id := <-clientIdCh
-	return int64(id)
+	l.eventCh <- ClientConnectedEvent{ClientId: clientId, ClientCh: client.ch}
 }
 
-func (l *Lobby) RequestState(clientId int64) int64 {
+func (l *Lobby) RequestState(clientId int) {
 	if l.game != nil {
-		playerId := l.ConnectToGame(clientId)
-		return playerId
+		l.ConnectToGame(clientId)
+		return
 	}
 
 	l.mu.RLock()
@@ -116,7 +132,6 @@ func (l *Lobby) RequestState(clientId int64) int64 {
 
 	ls := l.State()
 	client.ch <- ls
-	return -1
 }
 
 func (l *Lobby) State() LobbyState {
@@ -133,8 +148,7 @@ func (l *Lobby) State() LobbyState {
 }
 
 type LobbyHandler struct {
-	clientId int64
-	playerId int64
+	clientId int
 	lobby    *Lobby
 }
 
@@ -143,24 +157,23 @@ func (lh *LobbyHandler) Disconnect() {
 		return
 	}
 	lh.lobby.RemoveClient(lh.clientId)
-	lh.lobby.eventCh <- ClientLeftEvent{Id: int(lh.playerId)}
+	if lh.lobby.game != nil {
+		lh.lobby.eventCh <- ClientLeftEvent{Id: lh.clientId}
+	}
 }
 
 func (lh *LobbyHandler) RequestState() {
 	if lh.lobby == nil {
 		return
 	}
-	playerId := lh.lobby.RequestState(lh.clientId)
-	if playerId > 0 {
-		lh.playerId = playerId
-	}
+	lh.lobby.RequestState(lh.clientId)
 }
 
 func (lh *LobbyHandler) RunGame() {
 	if lh.lobby == nil {
 		return
 	}
-	lh.playerId = lh.lobby.RunGame(lh.clientId)
+	lh.lobby.RunGame(lh.clientId)
 }
 
 func (lh *LobbyHandler) HandleInput(p []byte) {
@@ -171,7 +184,7 @@ func (lh *LobbyHandler) HandleInput(p []byte) {
 		return
 	}
 	lh.lobby.eventCh <- ClientInputEvent{
-		Id:    int(lh.playerId),
+		Id:    lh.clientId,
 		Input: input,
 	}
 }

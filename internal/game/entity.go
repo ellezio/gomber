@@ -9,7 +9,7 @@ type Entity struct {
 	Velocity math2.Vector2 `json:"-"`
 	AABB     math2.Box2    `json:"aabb"`
 
-	Active bool `json:"-"`
+	Active bool `json:"active"`
 
 	game *Game
 }
