@@ -8,6 +8,7 @@ export class Player extends Entity {
     size: size,
     color: string,
     active: boolean,
+    public name: string,
     public speed: number,
     public maxBombs: number,
     public availableBombs: number,
@@ -30,6 +31,7 @@ export class Player extends Entity {
       },
       "green",
       playerMsg.active,
+      playerMsg.name,
       playerMsg.speed,
       playerMsg.maxBombs,
       playerMsg.availableBombs,
@@ -47,9 +49,22 @@ export class Player extends Entity {
     this.availableBombs = playerMsg.availableBombs;
     this.hp = playerMsg.hp;
     this.active = playerMsg.active;
+    this.name = playerMsg.name;
   }
 
-  update(ctx: CanvasRenderingContext2D): void {
-    super.update(ctx);
+  update(ctx: CanvasRenderingContext2D, offset: number, scale: number): void {
+    super.update(ctx, offset, scale);
+
+    if (!this.active) return;
+
+    ctx.fillStyle = "black";
+    ctx.font = "24px serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(
+      this.name,
+      this.size.width / 2 + this.position.x * scale + offset,
+      this.position.y * scale,
+    );
   }
 }

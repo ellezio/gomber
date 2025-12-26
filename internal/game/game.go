@@ -49,6 +49,7 @@ type ClientConnectedEvent struct {
 	// IdCh     chan<- int
 	ClientId int
 	ClientCh chan<- any
+	Name     string
 }
 type ClientDisconnectedEvent struct {
 	Id int
@@ -182,7 +183,7 @@ func (g *Game) update(dt float32) {
 		}
 	}
 
-	if live <= 1 {
+	if live <= 0 {
 		g.over = true
 	}
 
@@ -408,7 +409,7 @@ func (g *Game) playerVsCollectable(player *Player) {
 func (g *Game) handleClientEvent(event ClientEvent) {
 	switch data := event.(type) {
 	case ClientConnectedEvent:
-		g.addClient(data.ClientId, data.ClientCh)
+		g.addClient(data.ClientId, data.ClientCh, data.Name)
 
 	case ClientDisconnectedEvent:
 		g.clientDisconnected(data.Id)
@@ -424,8 +425,9 @@ func (g *Game) handleClientEvent(event ClientEvent) {
 }
 
 // handles client's id generation and instantiate player's entity
-func (g *Game) addClient(clientId int, clientCh chan<- any) {
+func (g *Game) addClient(clientId int, clientCh chan<- any, name string) {
 	player := NewPlayer()
+	player.Name = name
 	g.Instantiate(player)
 
 	// Pick empty spown point and place player in center of it

@@ -107,7 +107,7 @@ func (l *Lobby) RunGame(clientId int) {
 
 	l.mu.Lock()
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.id, ClientCh: c.ch}
+		l.eventCh <- ClientConnectedEvent{ClientId: c.id, ClientCh: c.ch, Name: c.client.info.Name}
 	}
 	l.mu.Unlock()
 }
@@ -117,7 +117,7 @@ func (l *Lobby) ConnectToGame(clientId int) {
 	client := l.clients[clientId]
 	l.mu.RUnlock()
 
-	l.eventCh <- ClientConnectedEvent{ClientId: clientId, ClientCh: client.ch}
+	l.eventCh <- ClientConnectedEvent{ClientId: clientId, ClientCh: client.ch, Name: client.client.info.Name}
 }
 
 func (l *Lobby) RequestState(clientId int) {

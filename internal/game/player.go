@@ -7,6 +7,7 @@ import (
 type Player struct {
 	Entity
 	Speed float32 `json:"speed"`
+	Name  string  `json:"name"`
 
 	freezeDropBomb bool
 	freezeDtSum    float32

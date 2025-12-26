@@ -4,12 +4,15 @@ import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
 import { Action, InputHandler, unprocessedInput } from "./input";
 import { lobbyState } from "./lobby";
+import { PlayerInfo } from "./playerInfo";
+import { PlayerList } from "./playersList";
 
 type entityInMsg = {
   id: number;
   pos: { x: number; y: number };
   aabb: { min: { x: number; y: number }; max: { x: number; y: number } };
   active: boolean;
+  name: string;
 };
 
 export type playerInMsg = entityInMsg & {
@@ -45,6 +48,8 @@ type ServerMessage =
     };
 
 export class Game {
+  playerList: PlayerList;
+  playerInfo: PlayerInfo;
   board: Board;
   inputHandler = new InputHandler();
 
@@ -58,11 +63,12 @@ export class Game {
   updateRate = 30;
   lastTs: number;
 
-  bombs = document.createElement("div");
-  hp = document.createElement("div");
-
   async start() {
-    this.board = new Board(1000, 600, this.inputHandler);
+    this.playerList = new PlayerList();
+    this.board = new Board(1000, 600, 200, this.inputHandler);
+    this.playerInfo = new PlayerInfo(650, 1);
+    this.playerInfo.ctx = this.board.ctx;
+
     this.populateDOM();
 
     // this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
@@ -78,6 +84,7 @@ export class Game {
       if (player.id === data.controlledEntityId) {
         if (this.board.player === undefined) {
           this.board.player = Player.fromMessage(player);
+          this.playerInfo.player = this.board.player;
         }
 
         // if (data.processedInput === null) continue;
@@ -175,8 +182,6 @@ export class Game {
     wrapper.appendChild(this.board.canvas);
     document.body.replaceChildren(wrapper);
     document.body.appendChild(this.fps);
-    document.body.appendChild(this.bombs);
-    document.body.appendChild(this.hp);
   }
 
   private update() {
@@ -194,20 +199,13 @@ export class Game {
       this.fc++;
     }
 
-    this.bombs.innerHTML =
-      "Bombs: " +
-      this.board.player.availableBombs +
-      "/" +
-      this.board.player.maxBombs;
-
-    this.hp.innerHTML = this.board.player.hp + " HP";
-
     let input: { actions: Action[]; dt: number } | null = null;
     if (this.board.player.active) {
       const actions = this.inputHandler.getAction();
       input = actions.length > 0 ? { actions, dt } : null;
     }
     this.board.update(input);
+    this.playerInfo.update();
 
     this.explosionDtSum += dt;
     if (this.explosionDtSum >= 0.3) {
