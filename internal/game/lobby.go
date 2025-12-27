@@ -54,17 +54,15 @@ func (l *Lobby) AddClient(clientCh chan<- any, client *Client) LobbyHandler {
 		lobby:    l,
 	}
 
-	if l.game == nil {
-		ls := l.State()
+	ls := l.State()
 
-		l.mu.Lock()
-		for _, c := range l.clients {
-			if c.id != lc.id {
-				c.ch <- ls
-			}
+	l.mu.Lock()
+	for _, c := range l.clients {
+		if c.id != lc.id {
+			c.ch <- ls
 		}
-		l.mu.Unlock()
 	}
+	l.mu.Unlock()
 
 	return lh
 }
@@ -74,15 +72,13 @@ func (l *Lobby) RemoveClient(clientId int) {
 	delete(l.clients, clientId)
 	l.mu.Unlock()
 
-	if l.game == nil {
-		ls := l.State()
+	ls := l.State()
 
-		l.mu.Lock()
-		for _, c := range l.clients {
-			c.ch <- ls
-		}
-		l.mu.Unlock()
+	l.mu.Lock()
+	for _, c := range l.clients {
+		c.ch <- ls
 	}
+	l.mu.Unlock()
 }
 
 func (l *Lobby) SetMap(mapName string) {}
@@ -97,10 +93,9 @@ func (l *Lobby) RunGame(clientId int) {
 		gr := l.game.Run("board1")
 		log.Println(gr)
 		l.game = nil
-		ls := l.State()
 		l.mu.Lock()
 		for _, c := range l.clients {
-			c.ch <- ls
+			c.ch <- "gameover"
 		}
 		l.mu.Unlock()
 	}()
@@ -121,17 +116,16 @@ func (l *Lobby) ConnectToGame(clientId int) {
 }
 
 func (l *Lobby) RequestState(clientId int) {
-	if l.game != nil {
-		l.ConnectToGame(clientId)
-		return
-	}
-
 	l.mu.RLock()
 	client := l.clients[clientId]
 	l.mu.RUnlock()
 
 	ls := l.State()
 	client.ch <- ls
+
+	if l.game != nil {
+		l.ConnectToGame(clientId)
+	}
 }
 
 func (l *Lobby) State() LobbyState {

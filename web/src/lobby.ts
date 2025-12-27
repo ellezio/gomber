@@ -1,9 +1,8 @@
+export type clients = { name: string; latency: number }[];
+
 export type lobbyState = {
   name: string;
-  clients: {
-    name: string;
-    latency: number;
-  }[];
+  clients: clients;
 };
 
 export class Lobby {
@@ -40,8 +39,8 @@ export class Lobby {
     this.root.replaceChildren(lobby);
   }
 
-  handleMessage(data: lobbyState) {
+  handleMessage(data: lobbyState, render: boolean) {
     this.update(data);
-    this.render();
+    if (render) this.render();
   }
 }

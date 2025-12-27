@@ -3,7 +3,7 @@ import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
 import { Action, InputHandler, unprocessedInput } from "./input";
-import { lobbyState } from "./lobby";
+import { clients, lobbyState } from "./lobby";
 import { PlayerInfo } from "./playerInfo";
 import { PlayerList } from "./playersList";
 
@@ -52,6 +52,7 @@ export class Game {
   playerInfo: PlayerInfo;
   board: Board;
   inputHandler = new InputHandler();
+  clients: clients;
 
   fps = document.createElement("div");
   fc = 0;
@@ -64,10 +65,11 @@ export class Game {
   lastTs: number;
 
   async start() {
-    this.playerList = new PlayerList();
+    this.playerList = new PlayerList(this, 0, 1);
     this.board = new Board(1000, 600, 200, this.inputHandler);
     this.playerInfo = new PlayerInfo(650, 1);
     this.playerInfo.ctx = this.board.ctx;
+    this.playerList.ctx = this.board.ctx;
 
     this.populateDOM();
 
@@ -206,6 +208,7 @@ export class Game {
     }
     this.board.update(input);
     this.playerInfo.update();
+    this.playerList.update();
 
     this.explosionDtSum += dt;
     if (this.explosionDtSum >= 0.3) {

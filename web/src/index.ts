@@ -9,7 +9,7 @@ type ServerMessage =
     }
   | {
       type: "ok";
-      details: "name";
+      details: "name" | "gameover";
     };
 
 class Client {
@@ -29,12 +29,18 @@ class Client {
     if ("type" in data) {
       switch (data.type) {
         case "lobbyState":
+          this.lobby?.handleMessage(data.details, !this.game);
           if (this.game != null) {
-            this.game = null;
+            this.game.clients = data.details.clients;
           }
-          this.lobby?.handleMessage(data.details);
           break;
         case "ok":
+          if (data.details == "gameover") {
+            this.game = null;
+            this.lobby.render();
+            break;
+          }
+
           this.askNameResolve?.(null);
           break;
       }
@@ -42,6 +48,7 @@ class Client {
       if (this.game == null) {
         this.game = new Game();
         this.game.conn = this.conn;
+        this.game.clients = this.lobby.state.clients;
         this.game.start();
       }
       this.game.handleMessage(data);
@@ -54,6 +61,7 @@ class Client {
       this.conn.send("game:start");
       this.game = new Game();
       this.game.conn = this.conn;
+      this.game.clients = this.lobby.state.clients;
       this.game.start();
     };
     this.conn.send("lobby:connect");
