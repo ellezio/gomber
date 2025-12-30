@@ -8,9 +8,6 @@ export type TileType = number;
 const SCALE = 1;
 
 export class Board {
-  canvas = document.createElement("canvas");
-  ctx = this.canvas.getContext("2d")!;
-
   grid: TileType[][];
 
   player: Player;
@@ -20,15 +17,9 @@ export class Board {
   powerups: Entity[] = [];
 
   constructor(
-    width: number,
-    height: number,
     private offset: number,
     private inputHandler: InputHandler,
-  ) {
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.canvas.style.border = "3px solid #000";
-  }
+  ) {}
 
   setGrid(grid: TileType[][]) {
     // const rowsCount = grid.length;
@@ -44,26 +35,25 @@ export class Board {
     this.grid = grid;
   }
 
-  update(input: input | null = null) {
-    this.clear();
-
+  update(ctx: CanvasRenderingContext2D, input: input | null = null) {
     // if (this.player !== undefined && input !== null) {
     //   const command = this.inputHandler.handleInput(input);
     //   command && command(this.player);
     // }
 
-    for (let x = 0; x < this.grid[0].length; x++) {
-      for (let y = 0; y < this.grid.length; y++) {
+    for (let y = 0; y < this.grid.length; y++) {
+      for (let x = 0; x < this.grid[0].length; x++) {
         const tile = this.grid[y][x];
+        if (tile === 0) continue;
+
         if (tile === 1) {
-          this.ctx.fillStyle = "gray";
-          const size = 50 * SCALE;
-          this.ctx.fillRect(this.offset + x * size, y * size, size, size);
+          ctx.fillStyle = "gray";
         } else if (tile === 2) {
-          this.ctx.fillStyle = "brown";
-          const size = 50 * SCALE;
-          this.ctx.fillRect(this.offset + x * size, y * size, size, size);
+          ctx.fillStyle = "brown";
         }
+
+        const size = 50 * SCALE;
+        ctx.fillRect(this.offset + x * size, y * size, size, size);
       }
     }
 
@@ -74,18 +64,12 @@ export class Board {
       //   entity.color = "blue";
       // }
 
-      entity.update(this.ctx, this.offset, SCALE);
+      entity.update(ctx, this.offset, SCALE);
     }
 
-    this.bombs.forEach((b) => b.update(this.ctx, this.offset, SCALE));
-    this.explosions.forEach((e) => e.update(this.ctx, this.offset, SCALE));
-    this.powerups.forEach((e) => e.update(this.ctx, this.offset, SCALE));
-    this.player?.update(this.ctx, this.offset, SCALE);
-  }
-
-  private clear() {
-    // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.fillStyle = "#404040";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.bombs.forEach((b) => b.update(ctx, this.offset, SCALE));
+    this.explosions.forEach((e) => e.update(ctx, this.offset, SCALE));
+    this.powerups.forEach((e) => e.update(ctx, this.offset, SCALE));
+    this.player?.update(ctx, this.offset, SCALE);
   }
 }

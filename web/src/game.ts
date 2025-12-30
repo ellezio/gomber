@@ -66,12 +66,17 @@ export class Game {
 
   updateInterval: number;
 
+  canvas = document.createElement("canvas");
+  ctx = this.canvas.getContext("2d");
+
   async start() {
+    this.canvas.width = 1000;
+    this.canvas.height = 600;
+    this.canvas.style.border = "3px solid #000";
+
     this.playerList = new PlayerList(this, 0, 1);
-    this.board = new Board(1000, 600, 200, this.inputHandler);
+    this.board = new Board(200, this.inputHandler);
     this.playerInfo = new PlayerInfo(650, 1);
-    this.playerInfo.ctx = this.board.ctx;
-    this.playerList.ctx = this.board.ctx;
 
     this.populateDOM();
 
@@ -186,12 +191,14 @@ export class Game {
     const wrapper = document.createElement("div");
     wrapper.style.width = "fit-content";
     wrapper.style.margin = "auto";
-    wrapper.appendChild(this.board.canvas);
+    wrapper.appendChild(this.canvas);
     document.body.replaceChildren(wrapper);
     document.body.appendChild(this.fps);
   }
 
   private update() {
+    this.clear();
+
     const nowTs = +new Date();
     const lastTs = this.lastTs || nowTs;
     const dt = (nowTs - lastTs) / 1000;
@@ -211,9 +218,9 @@ export class Game {
       const actions = this.inputHandler.getAction();
       input = actions.length > 0 ? { actions, dt } : null;
     }
-    this.board.update(input);
-    this.playerInfo.update();
-    this.playerList.update();
+    this.board.update(this.ctx, input);
+    this.playerInfo.update(this.ctx);
+    this.playerList.update(this.ctx);
 
     this.explosionDtSum += dt;
     if (this.explosionDtSum >= 0.3) {
@@ -245,36 +252,31 @@ export class Game {
   renderResult(winner: string) {
     clearInterval(this.updateInterval);
 
-    this.board.ctx.fillStyle = "#404040";
-    this.board.ctx.fillRect(
-      0,
-      0,
-      this.board.canvas.width,
-      this.board.canvas.height,
-    );
+    this.clear();
 
-    this.board.ctx.fillStyle = "black";
-    this.board.ctx.font = "48px serif";
-    this.board.ctx.textAlign = "center";
-    this.board.ctx.textBaseline = "middle";
+    this.ctx.fillStyle = "black";
+    this.ctx.font = "48px serif";
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "middle";
     if (winner != undefined) {
-      this.board.ctx.fillText(
+      this.ctx.fillText(
         "winner",
-        this.board.canvas.width / 2,
-        this.board.canvas.height / 2 - 24,
+        this.canvas.width / 2,
+        this.canvas.height / 2 - 24,
       );
 
-      this.board.ctx.fillText(
+      this.ctx.fillText(
         winner,
-        this.board.canvas.width / 2,
-        this.board.canvas.height / 2 + 24,
+        this.canvas.width / 2,
+        this.canvas.height / 2 + 24,
       );
     } else {
-      this.board.ctx.fillText(
-        "draw",
-        this.board.canvas.width / 2,
-        this.board.canvas.height / 2,
-      );
+      this.ctx.fillText("draw", this.canvas.width / 2, this.canvas.height / 2);
     }
+  }
+
+  private clear() {
+    this.ctx.fillStyle = "#404040";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 }
