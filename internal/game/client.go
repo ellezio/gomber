@@ -10,6 +10,7 @@ import (
 )
 
 type ClientInfo struct {
+	Id      int    `json:"id"`
 	Name    string `json:"name"`
 	Latency int    `json:"latency"`
 }
@@ -53,6 +54,11 @@ func (c *Client) serializeMessage(msg any) ([]byte, error) {
 	case LobbyState:
 		msg = Message{
 			Type:    "lobbyState",
+			Details: m,
+		}
+	case GameResult:
+		msg = Message{
+			Type:    "gameResult",
 			Details: m,
 		}
 	case string:

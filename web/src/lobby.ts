@@ -1,4 +1,8 @@
-export type clients = { name: string; latency: number }[];
+export type clients = {
+  id: number;
+  name: string;
+  latency: number;
+}[];
 
 export type lobbyState = {
   name: string;

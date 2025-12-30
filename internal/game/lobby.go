@@ -45,6 +45,8 @@ func (l *Lobby) AddClient(clientCh chan<- any, client *Client) LobbyHandler {
 		lc.Admin = true
 	}
 
+	client.info.Id = lc.id
+
 	l.mu.Lock()
 	l.clients[lc.id] = lc
 	l.mu.Unlock()
@@ -94,8 +96,9 @@ func (l *Lobby) RunGame(clientId int) {
 		log.Println(gr)
 		l.game = nil
 		l.mu.Lock()
+
 		for _, c := range l.clients {
-			c.ch <- "gameover"
+			c.ch <- gr
 		}
 		l.mu.Unlock()
 	}()

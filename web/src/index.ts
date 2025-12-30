@@ -3,14 +3,9 @@ import { Lobby, lobbyState } from "./lobby";
 
 type ServerMessage =
   | boardUpdateMessage
-  | {
-      type: "lobbyState";
-      details: lobbyState;
-    }
-  | {
-      type: "ok";
-      details: "name" | "gameover";
-    };
+  | { type: "lobbyState"; details: lobbyState }
+  | { type: "gameResult"; details: { winnerId: number } }
+  | { type: "ok"; details: "name" };
 
 class Client {
   conn: WebSocket;
@@ -34,13 +29,17 @@ class Client {
             this.game.clients = data.details.clients;
           }
           break;
-        case "ok":
-          if (data.details == "gameover") {
+        case "gameResult":
+          const client = this.lobby.state.clients.find(
+            (c) => c.id == data.details.winnerId,
+          );
+          this.game.renderResult(client?.name);
+          setTimeout(() => {
             this.game = null;
             this.lobby.render();
-            break;
-          }
-
+          }, 2000);
+          break;
+        case "ok":
           this.askNameResolve?.(null);
           break;
       }

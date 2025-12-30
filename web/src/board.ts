@@ -84,6 +84,8 @@ export class Board {
   }
 
   private clear() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillStyle = "#404040";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 }

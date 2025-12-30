@@ -64,6 +64,8 @@ export class Game {
   updateRate = 30;
   lastTs: number;
 
+  updateInterval: number;
+
   async start() {
     this.playerList = new PlayerList(this, 0, 1);
     this.board = new Board(1000, 600, 200, this.inputHandler);
@@ -78,7 +80,10 @@ export class Game {
 
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
-    setInterval(() => this.update(), 1000 / this.updateRate);
+    this.updateInterval = window.setInterval(
+      () => this.update(),
+      1000 / this.updateRate,
+    );
   }
 
   public handleMessage(data: boardUpdateMessage) {
@@ -233,6 +238,42 @@ export class Game {
           actions: uinp.input.actions,
           dt: uinp.input.dt,
         }),
+      );
+    }
+  }
+
+  renderResult(winner: string) {
+    clearInterval(this.updateInterval);
+
+    this.board.ctx.fillStyle = "#404040";
+    this.board.ctx.fillRect(
+      0,
+      0,
+      this.board.canvas.width,
+      this.board.canvas.height,
+    );
+
+    this.board.ctx.fillStyle = "black";
+    this.board.ctx.font = "48px serif";
+    this.board.ctx.textAlign = "center";
+    this.board.ctx.textBaseline = "middle";
+    if (winner != undefined) {
+      this.board.ctx.fillText(
+        "winner",
+        this.board.canvas.width / 2,
+        this.board.canvas.height / 2 - 24,
+      );
+
+      this.board.ctx.fillText(
+        winner,
+        this.board.canvas.width / 2,
+        this.board.canvas.height / 2 + 24,
+      );
+    } else {
+      this.board.ctx.fillText(
+        "draw",
+        this.board.canvas.width / 2,
+        this.board.canvas.height / 2,
       );
     }
   }

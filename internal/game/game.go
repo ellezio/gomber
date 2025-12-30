@@ -79,7 +79,7 @@ type SpawnPoint struct {
 }
 
 type GameResult struct {
-	winnerId int
+	WinnerId int `json:"winnerId"`
 }
 
 type Game struct {
@@ -131,7 +131,7 @@ func (g *Game) Run(mapName string) GameResult {
 				gr := GameResult{}
 				for i, c := range g.clients {
 					if c.controlledEntity.Active {
-						gr.winnerId = i
+						gr.WinnerId = i
 						break
 					}
 				}
@@ -183,7 +183,7 @@ func (g *Game) update(dt float32) {
 		}
 	}
 
-	if live <= 0 {
+	if live <= 1 {
 		g.over = true
 	}
 
