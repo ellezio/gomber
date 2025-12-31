@@ -25,10 +25,40 @@ const (
 	DropBomb action = "dropBomb"
 )
 
+type InputList struct {
+	head *Input
+	tail *Input
+}
+
+func (i *InputList) Append(inp Input) {
+	if i.head == nil {
+		i.head = &inp
+	} else {
+		i.tail.next = &inp
+	}
+
+	i.tail = &inp
+}
+
+func (i *InputList) Pop() *Input {
+	if i.head == nil {
+		return nil
+	}
+
+	inp := i.head
+	i.head = inp.next
+	if inp.next == nil {
+		i.tail = nil
+	}
+	inp.next = nil
+	return inp
+}
+
 type Input struct {
 	Id        int      `json:"id"`
 	Actions   []action `json:"actions"`
 	DeltaTime float32  `json:"dt"`
+	next      *Input
 }
 
 func (i *Input) hasAction(action action) bool {

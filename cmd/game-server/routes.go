@@ -28,35 +28,14 @@ func setupRoutes() {
 			return
 		}
 
-		client := game.NewClient(conn)
-
-		// channel for game to communicate with client
-		clientCh := make(chan any)
-		done := make(chan bool)
-
-		// loop for reveiving message from game
-		// and sending them to client
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				case msg := <-clientCh:
-					err := client.SendMessage(msg)
-					if err != nil {
-						log.Println(err)
-					}
-				}
-			}
-		}()
-
 		var handler game.LobbyHandler
 
 		// var g *game.Game
 		// var id int
-		client.Serve(func(p []byte) {
+		client := game.NewClient()
+		client.Serve(conn, func(p []byte) {
 			if bytes.Equal(p, []byte("lobby:connect")) {
-				handler = lobby.AddClient(clientCh, client)
+				handler = lobby.AddClient(client)
 				handler.RequestState()
 			} else if bytes.Equal(p, []byte("game:start")) {
 				handler.RunGame()
@@ -93,6 +72,5 @@ func setupRoutes() {
 
 		// eventCh <- game.ClientLeftEvent{Id: id}
 		handler.Disconnect()
-		done <- true
 	})
 }

@@ -39,8 +39,8 @@ func NewLobby(name string) *Lobby {
 	}
 }
 
-func (l *Lobby) AddClient(clientCh chan<- any, client *Client) LobbyHandler {
-	lc := LobbyClient{ch: clientCh, id: int(l.lastId.Add(1)), client: client}
+func (l *Lobby) AddClient(client *Client) LobbyHandler {
+	lc := LobbyClient{ch: client.C, id: int(l.lastId.Add(1)), client: client}
 	if len(l.clients) == 0 {
 		lc.Admin = true
 	}
@@ -93,10 +93,8 @@ func (l *Lobby) RunGame(clientId int) {
 	l.game = NewGame(l.eventCh)
 	go func() {
 		gr := l.game.Run("board1")
-		log.Println(gr)
 		l.game = nil
 		l.mu.Lock()
-
 		for _, c := range l.clients {
 			c.ch <- gr
 		}
@@ -105,7 +103,7 @@ func (l *Lobby) RunGame(clientId int) {
 
 	l.mu.Lock()
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.id, ClientCh: c.ch, Name: c.client.info.Name}
+		l.eventCh <- ClientConnectedEvent{ClientId: c.id, Notifier: c.client, Name: c.client.info.Name}
 	}
 	l.mu.Unlock()
 }
@@ -115,7 +113,7 @@ func (l *Lobby) ConnectToGame(clientId int) {
 	client := l.clients[clientId]
 	l.mu.RUnlock()
 
-	l.eventCh <- ClientConnectedEvent{ClientId: clientId, ClientCh: client.ch, Name: client.client.info.Name}
+	l.eventCh <- ClientConnectedEvent{ClientId: clientId, Notifier: client.client, Name: client.client.info.Name}
 }
 
 func (l *Lobby) RequestState(clientId int) {

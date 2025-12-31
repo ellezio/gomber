@@ -27,15 +27,28 @@ const (
 	Tile_DestructibleWall
 )
 
+// ClientGameState represents the state of the game
+// that is presented to each client, which may differ.
+// Each client receives state with information that are trimmed for them.
+type ClientGameState struct {
+	ControlledEntityId int       `json:"controlledEntityId"`
+	GameState          GameState `json:"board"`
+	ProcessedInput     *Input    `json:"processedInput"`
+}
+
+type ClientNotifier interface {
+	OnNewGameState(ClientGameState)
+}
+
 type GameClient struct {
 	isDisconnected bool
 	// I thinking about giving a player ability to
 	// swap in game controlle over entity
 	controlledEntity *Player
-	clientCh         chan<- any
+	notifier         ClientNotifier
 
 	// queue for input yet to be processed
-	inputs []Input
+	inputs InputList
 	// input that was just processed which will be sent to client
 	// in order to inform about which input was involved into generating new state of game
 	processedInput *Input
@@ -46,10 +59,9 @@ type GameClient struct {
 // type then just `any`
 type ClientEvent any
 type ClientConnectedEvent struct {
-	// IdCh     chan<- int
 	ClientId int
-	ClientCh chan<- any
 	Name     string
+	Notifier ClientNotifier
 }
 type ClientDisconnectedEvent struct {
 	Id int
@@ -112,7 +124,7 @@ func (g *Game) Run(mapName string) GameResult {
 
 	ticker := time.NewTicker(time.Second / time.Duration(updatesRate))
 	lastTs := time.Now()
-	for {
+	for !g.over {
 		select {
 		case event := <-g.clientsEventsCh:
 			g.handleClientEvent(event)
@@ -127,42 +139,34 @@ func (g *Game) Run(mapName string) GameResult {
 			g.checkCollision()
 			g.update(float32(dt))
 
-			if g.over {
-				gr := GameResult{}
-				for i, c := range g.clients {
-					if c.controlledEntity.Active {
-						gr.WinnerId = i
-						break
-					}
-				}
-				return gr
-			}
-
 			for _, client := range g.clients {
-				client.clientCh <- struct {
-					ControlledEntityId int       `json:"controlledEntityId"`
-					GameState          GameState `json:"board"`
-					ProcessedInput     *Input    `json:"processedInput"`
-				}{
+				client.notifier.OnNewGameState(ClientGameState{
 					ControlledEntityId: client.controlledEntity.Id,
 					GameState:          g.GameState,
 					ProcessedInput:     client.processedInput,
-				}
+				})
 
 				client.processedInput = nil
 			}
 		}
 	}
+
+	gr := GameResult{}
+	for i, c := range g.clients {
+		if c.controlledEntity.Active {
+			gr.WinnerId = i
+			break
+		}
+	}
+	return gr
 }
 
 func (g *Game) handleInput(dt float32) {
 	for _, client := range g.clients {
-		if len(client.inputs) == 0 {
+		input := client.inputs.Pop()
+		if input == nil {
 			continue
 		}
-
-		input := &client.inputs[0]
-		client.inputs = client.inputs[1:]
 
 		if commands := g.inputHandler.HandleInput(input); commands != nil {
 			for _, command := range commands {
@@ -183,7 +187,7 @@ func (g *Game) update(dt float32) {
 		}
 	}
 
-	if live <= 1 {
+	if live <= 0 {
 		g.over = true
 	}
 
@@ -206,12 +210,8 @@ func (g *Game) checkCollision() {
 			playerVelocity := player.Velocity
 			g.playerVsObstacles(player)
 
-			// NOTE:
 			// after resolving the collision it happens to jump to an another collision when on high speed
 			// so there is a need to detect and resolve the new collision
-			//
-			// TODO (I don't think this is needed now):
-			// find another approach to reslove this case
 			if playerVelocity.X != player.Velocity.X || playerVelocity.Y != player.Velocity.Y {
 				g.playerVsObstacles(player)
 			}
@@ -407,27 +407,27 @@ func (g *Game) playerVsCollectable(player *Player) {
 }
 
 func (g *Game) handleClientEvent(event ClientEvent) {
-	switch data := event.(type) {
+	switch details := event.(type) {
 	case ClientConnectedEvent:
-		g.addClient(data.ClientId, data.ClientCh, data.Name)
+		g.addClient(details)
 
 	case ClientDisconnectedEvent:
-		g.clientDisconnected(data.Id)
+		g.clientDisconnected(details.Id)
 
 	case ClientLeftEvent:
-		g.removeClient(data.Id)
+		g.removeClient(details.Id)
 
 	case ClientInputEvent:
-		if g.clients[data.Id].controlledEntity.Active {
-			g.clients[data.Id].inputs = append(g.clients[data.Id].inputs, data.Input)
+		if g.clients[details.Id].controlledEntity.Active {
+			g.clients[details.Id].inputs.Append(details.Input)
 		}
 	}
 }
 
 // handles client's id generation and instantiate player's entity
-func (g *Game) addClient(clientId int, clientCh chan<- any, name string) {
+func (g *Game) addClient(details ClientConnectedEvent) {
 	player := NewPlayer()
-	player.Name = name
+	player.Name = details.Name
 	g.Instantiate(player)
 
 	// Pick empty spown point and place player in center of it
@@ -447,9 +447,9 @@ func (g *Game) addClient(clientId int, clientCh chan<- any, name string) {
 		break
 	}
 
-	g.clients[clientId] = &GameClient{
+	g.clients[details.ClientId] = &GameClient{
 		isDisconnected:   false,
-		clientCh:         clientCh,
+		notifier:         details.Notifier,
 		controlledEntity: player,
 	}
 }

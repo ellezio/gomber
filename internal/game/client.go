@@ -17,31 +17,63 @@ type ClientInfo struct {
 
 type Client struct {
 	mu   sync.Mutex
-	conn *websocket.Conn
 	info ClientInfo
+	C    chan<- any
 }
 
-func NewClient(conn *websocket.Conn) *Client {
+func NewClient() *Client {
 	return &Client{
-		mu:   sync.Mutex{},
-		conn: conn,
+		mu: sync.Mutex{},
 	}
 }
 
-func (c *Client) SendMessage(msg any) error {
-	if msg, err := c.serializeMessage(msg); err != nil {
-		return err
-	} else {
-		c.WriteMessage(msg)
+func (c *Client) Serve(conn *websocket.Conn, fn func(p []byte)) {
+	// channel for game to communicate with client
+	ch := make(chan any)
+	defer close(ch)
+	c.C = ch
+
+	// loop for reveiving message from game
+	// and sending them to client
+	go func() {
+		for msg := range ch {
+			msg, err := c.serializeMessage(msg)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			conn.WriteMessage(websocket.TextMessage, msg)
+		}
+	}()
+
+	_, p, err := conn.ReadMessage()
+	if err != nil {
+		log.Println(err)
+		return
 	}
 
-	return nil
-}
+	if bytes.HasPrefix(p, []byte("name:")) {
+		c.info.Name = string(p[5:])
+		ch <- "name"
+	}
 
-func (c *Client) WriteMessage(msg []byte) {
-	c.mu.Lock()
-	c.conn.WriteMessage(websocket.TextMessage, msg)
-	c.mu.Unlock()
+	for {
+		_, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		fn(p)
+
+		// input := Input{}
+		// err = json.Unmarshal(p, &input)
+		// if err != nil {
+		// 	log.Println(err)
+		// 	continue
+		// }
+	}
+
 }
 
 func (c *Client) serializeMessage(msg any) ([]byte, error) {
@@ -75,34 +107,13 @@ func (c *Client) serializeMessage(msg any) ([]byte, error) {
 	}
 }
 
-func (c *Client) Serve(fn func(p []byte)) {
-	for {
-		_, p, err := c.conn.ReadMessage()
-		if err != nil {
-			log.Println(err)
-			break
-		}
-
-		if bytes.HasPrefix(p, []byte("name:")) {
-			c.info.Name = string(p[5:])
-			c.SendMessage("name")
-			continue
-		}
-
-		fn(p)
-
-		// input := Input{}
-		// err = json.Unmarshal(p, &input)
-		// if err != nil {
-		// 	log.Println(err)
-		// 	continue
-		// }
-	}
-}
-
 func (c *Client) Info() ClientInfo {
 	c.mu.Lock()
 	info := c.info
 	c.mu.Unlock()
 	return info
+}
+
+func (c *Client) OnNewGameState(state ClientGameState) {
+	c.C <- state
 }
