@@ -33,7 +33,7 @@ func (c *Client) Serve(conn *websocket.Conn, fn func(p []byte)) {
 	defer close(ch)
 	c.C = ch
 
-	// loop for reveiving message from game
+	// loop for receiving message from game
 	// and sending them to client
 	go func() {
 		for msg := range ch {
@@ -65,13 +65,6 @@ func (c *Client) Serve(conn *websocket.Conn, fn func(p []byte)) {
 		}
 
 		fn(p)
-
-		// input := Input{}
-		// err = json.Unmarshal(p, &input)
-		// if err != nil {
-		// 	log.Println(err)
-		// 	continue
-		// }
 	}
 
 }
