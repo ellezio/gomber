@@ -7,12 +7,57 @@ import (
 	"sync/atomic"
 )
 
+type LobbyMessege interface {
+	iLobbyMessege()
+}
+
+func (ConnectClientMessage) iLobbyMessege() {}
+
+type ConnectClientMessage struct {
+	info   ClientInfo
+	sendFn SendClientMessage
+}
+
+type LobbyService struct {
+	lobbies map[int]*Lobby
+}
+
+func NewLobbyService() *LobbyService {
+	lobbies := make(map[int]*Lobby)
+	lobbies[1] = NewLobby("unsafe test lobby")
+	return &LobbyService{lobbies: lobbies}
+}
+
+func (ls *LobbyService) Create() {}
+
+func (ls *LobbyService) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) *LobbyHandler {
+	lobby, _ := ls.lobbies[lobbyId]
+	return lobby.AddClient(ConnectClientMessage{
+		info:   info,
+		sendFn: sendFn,
+	})
+}
+
+func (ls *LobbyService) Leave() {}
+
+func (ls *LobbyService) HandleAction() {}
+
+func (ls *LobbyService) SendMessage(lobbyId int, message LobbyMessege) {}
+
 type LobbyClient struct {
-	id     int
-	ch     chan<- any
-	client *Client
+	// id int
+	sendFn SendClientMessage
+
+	// client   *ClientSession
+	clientId int
+	name     string
+	latency  int
 
 	Admin bool
+}
+
+func (lc *LobbyClient) OnNewGameState(state ClientGameState) {
+	lc.sendFn(state)
 }
 
 type LobbyState struct {
@@ -39,20 +84,24 @@ func NewLobby(name string) *Lobby {
 	}
 }
 
-func (l *Lobby) AddClient(client *Client) LobbyHandler {
-	lc := LobbyClient{ch: client.C, id: int(l.lastId.Add(1)), client: client}
+func (l *Lobby) AddClient(connClientMsg ConnectClientMessage) *LobbyHandler {
+	lc := LobbyClient{
+		clientId: connClientMsg.info.Id,
+		name:     connClientMsg.info.Name,
+		latency:  connClientMsg.info.Latency,
+		sendFn:   connClientMsg.sendFn,
+	}
+
 	if len(l.clients) == 0 {
 		lc.Admin = true
 	}
 
-	client.info.Id = lc.id
-
 	l.mu.Lock()
-	l.clients[lc.id] = lc
+	l.clients[lc.clientId] = lc
 	l.mu.Unlock()
 
 	lh := LobbyHandler{
-		clientId: lc.id,
+		clientId: lc.clientId,
 		lobby:    l,
 	}
 
@@ -60,13 +109,13 @@ func (l *Lobby) AddClient(client *Client) LobbyHandler {
 
 	l.mu.Lock()
 	for _, c := range l.clients {
-		if c.id != lc.id {
-			c.ch <- ls
+		if c.clientId != lc.clientId {
+			c.sendFn(ls)
 		}
 	}
 	l.mu.Unlock()
 
-	return lh
+	return &lh
 }
 
 func (l *Lobby) RemoveClient(clientId int) {
@@ -78,7 +127,7 @@ func (l *Lobby) RemoveClient(clientId int) {
 
 	l.mu.Lock()
 	for _, c := range l.clients {
-		c.ch <- ls
+		c.sendFn(ls)
 	}
 	l.mu.Unlock()
 }
@@ -96,14 +145,14 @@ func (l *Lobby) RunGame(clientId int) {
 		l.game = nil
 		l.mu.Lock()
 		for _, c := range l.clients {
-			c.ch <- gr
+			c.sendFn(gr)
 		}
 		l.mu.Unlock()
 	}()
 
 	l.mu.Lock()
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.id, Notifier: c.client, Name: c.client.info.Name}
+		l.eventCh <- ClientConnectedEvent{ClientId: c.clientId, Notifier: &c, Name: c.name}
 	}
 	l.mu.Unlock()
 }
@@ -113,7 +162,7 @@ func (l *Lobby) ConnectToGame(clientId int) {
 	client := l.clients[clientId]
 	l.mu.RUnlock()
 
-	l.eventCh <- ClientConnectedEvent{ClientId: clientId, Notifier: client.client, Name: client.client.info.Name}
+	l.eventCh <- ClientConnectedEvent{ClientId: clientId, Notifier: &client, Name: client.name}
 }
 
 func (l *Lobby) RequestState(clientId int) {
@@ -122,7 +171,7 @@ func (l *Lobby) RequestState(clientId int) {
 	l.mu.RUnlock()
 
 	ls := l.State()
-	client.ch <- ls
+	client.sendFn(ls)
 
 	if l.game != nil {
 		l.ConnectToGame(clientId)
@@ -136,7 +185,7 @@ func (l *Lobby) State() LobbyState {
 	ls := LobbyState{}
 	ls.Name = l.name
 	for _, c := range l.clients {
-		ls.Clients = append(ls.Clients, c.client.Info())
+		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientId, Name: c.name, Latency: c.latency})
 	}
 
 	return ls

@@ -1,15 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/ellezio/gomber/internal/game"
 	"github.com/gorilla/websocket"
 )
 
-var lobby *game.Lobby = game.NewLobby("unsafe test lobby")
+var lobbyService = game.NewLobbyService()
+var nextId atomic.Int32
 
 func setupRoutes() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -28,20 +29,7 @@ func setupRoutes() {
 			return
 		}
 
-		var handler game.LobbyHandler
-
-		client := game.NewClient()
-		client.Serve(conn, func(p []byte) {
-			if bytes.Equal(p, []byte("lobby:connect")) {
-				handler = lobby.AddClient(client)
-				handler.RequestState()
-			} else if bytes.Equal(p, []byte("game:start")) {
-				handler.RunGame()
-			} else {
-				handler.HandleInput(p)
-			}
-		})
-
-		handler.Disconnect()
+		client := game.NewClient(int(nextId.Add(1)), lobbyService)
+		client.Serve(conn)
 	})
 }
