@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -19,30 +20,44 @@ type ConnectClientMessage struct {
 }
 
 type LobbyManager struct {
+	mu      sync.RWMutex
 	lobbies map[int]*Lobby
+	nextID  int
 }
 
 func NewLobbyManager() *LobbyManager {
 	lobbies := make(map[int]*Lobby)
-	lobbies[1] = NewLobby("unsafe test lobby")
 	return &LobbyManager{lobbies: lobbies}
 }
 
-func (ls *LobbyManager) Create() {}
+func (ls *LobbyManager) CreateAndJoin(name string, clientInfo ClientInfo, sendFn SendClientMessage) *LobbyHandler {
+	lobby := NewLobby(name)
 
-func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) *LobbyHandler {
-	lobby, _ := ls.lobbies[lobbyId]
+	ls.mu.Lock()
+	ls.lobbies[ls.nextID] = lobby
+	ls.nextID++
+	ls.mu.Unlock()
+
 	return lobby.AddClient(ConnectClientMessage{
-		info:   info,
+		info:   clientInfo,
 		sendFn: sendFn,
 	})
 }
 
-func (ls *LobbyManager) Leave() {}
+func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) (*LobbyHandler, error) {
+	ls.mu.Lock()
+	lobby, ok := ls.lobbies[lobbyId]
+	ls.mu.Unlock()
 
-func (ls *LobbyManager) HandleAction() {}
+	if !ok {
+		return nil, errors.New("Lobby not exists")
+	}
 
-func (ls *LobbyManager) SendMessage(lobbyId int, message LobbyMessege) {}
+	return lobby.AddClient(ConnectClientMessage{
+		info:   info,
+		sendFn: sendFn,
+	}), nil
+}
 
 type LobbyClient struct {
 	// id int

@@ -28,13 +28,6 @@ const (
 
 type SendClientMessage func(ClientMessage)
 
-type ILobbyService interface {
-	Create()
-	Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) *LobbyHandler
-	Leave()
-	HandleAction()
-}
-
 type ClientMessage interface {
 	iClientMessage()
 }
@@ -65,6 +58,21 @@ func NewClientManager() *ClientManager {
 	}
 }
 
+func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
+	clientID := int(cm.nextID.Add(1))
+	client := NewClient(clientID, lobbies)
+
+	cm.mu.Lock()
+	cm.clients[clientID] = client
+	cm.mu.Unlock()
+
+	client.Serve(conn)
+
+	cm.mu.Lock()
+	delete(cm.clients, clientID)
+	cm.mu.Unlock()
+}
+
 type ClientInfo struct {
 	Id      int    `json:"id"`
 	Name    string `json:"name"`
@@ -81,7 +89,7 @@ type ClientSession struct {
 	update           chan ClientMessage
 	updateBufferFull chan struct{}
 
-	LobbyService ILobbyService
+	LobbyManager *LobbyManager
 	lobbyHandler *LobbyHandler
 
 	mu             sync.Mutex
@@ -89,12 +97,12 @@ type ClientSession struct {
 	nextPingID     int
 }
 
-func NewClient(id int, ls ILobbyService) *ClientSession {
+func NewClient(id int, lm *LobbyManager) *ClientSession {
 	return &ClientSession{
 		info:             ClientInfo{Id: id},
 		update:           make(chan ClientMessage, updateQueueSize),
 		updateBufferFull: make(chan struct{}, 1),
-		LobbyService:     ls,
+		LobbyManager:     lm,
 		latencyTracker:   make(map[int]time.Time),
 	}
 }
@@ -278,12 +286,13 @@ func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 			return fmt.Errorf("client is already connected to a lobby")
 		}
 
-		// NOTE:
-		// The current implementation Join method id temporal it will be rewriten when I will refactory lobby system
-		// In future it should only return error.
-		c.lobbyHandler = c.LobbyService.Join(1, c.info, c.createSendClientMessageFn(ctx))
-		if c.lobbyHandler == nil {
-			return fmt.Errorf("could not join lobby")
+		var err error
+		sendFn := c.createSendClientMessageFn(ctx)
+		// TODO: when there will be lobby selection menu replace it with proper id
+		// and handle case when lobby not exists.
+		c.lobbyHandler, err = c.LobbyManager.Join(0, c.info, sendFn)
+		if err != nil {
+			c.lobbyHandler = c.LobbyManager.CreateAndJoin("lobby name", c.info, sendFn)
 		}
 		c.lobbyHandler.RequestState()
 	case bytes.Equal(p, []byte("game:start")):
