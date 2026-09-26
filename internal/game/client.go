@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -52,6 +53,18 @@ type ErrorMessage struct {
 	value string
 }
 
+type ClientManager struct {
+	mu      sync.Mutex
+	nextID  atomic.Int32
+	clients map[int]*ClientSession
+}
+
+func NewClientManager() *ClientManager {
+	return &ClientManager{
+		clients: make(map[int]*ClientSession),
+	}
+}
+
 type ClientInfo struct {
 	Id      int    `json:"id"`
 	Name    string `json:"name"`
@@ -59,7 +72,7 @@ type ClientInfo struct {
 }
 
 type ClientSession struct {
-	Info ClientInfo
+	info ClientInfo
 
 	// Those channels cannot be closed because some part of system may still
 	// use them to notify client until they got notified about client session
@@ -78,7 +91,7 @@ type ClientSession struct {
 
 func NewClient(id int, ls ILobbyService) *ClientSession {
 	return &ClientSession{
-		Info:             ClientInfo{Id: id},
+		info:             ClientInfo{Id: id},
 		update:           make(chan ClientMessage, updateQueueSize),
 		updateBufferFull: make(chan struct{}, 1),
 		LobbyService:     ls,
@@ -106,7 +119,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 	})
 
 	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		slog.Error("failed to set read deadline", "clientID", c.Info.Id, "error", err.Error())
+		slog.Error("failed to set read deadline", "clientID", c.info.Id, "error", err.Error())
 		return
 	}
 
@@ -115,7 +128,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		return
 	}
 
-	c.Info.Name, err = parseNameMessage(p)
+	c.info.Name, err = parseNameMessage(p)
 	if err != nil {
 		closeWithPolicyViolation(conn, err.Error())
 		return
@@ -164,8 +177,8 @@ func (c *ClientSession) readTextMessage(conn *websocket.Conn) ([]byte, error) {
 
 	if err != nil {
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-			slog.Error("failed to read websocket's text message", "clientID", c.Info.Id, "error", err.Error())
-			return nil, fmt.Errorf("client %d: reading message: %v", c.Info.Id, err)
+			slog.Error("failed to read websocket's text message", "clientID", c.info.Id, "error", err.Error())
+			return nil, fmt.Errorf("client %d: reading message: %v", c.info.Id, err)
 		}
 
 		return nil, err
@@ -251,7 +264,7 @@ func (c *ClientSession) measurePingLatency(pingID string) error {
 		delete(c.latencyTracker, int(id))
 		ms := time.Since(l).Milliseconds()
 		// TODO: update the lobby about new latency - do it when refactoring lobby system
-		c.Info.Latency = int(ms)
+		c.info.Latency = int(ms)
 		return nil
 	}
 
@@ -268,7 +281,7 @@ func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 		// NOTE:
 		// The current implementation Join method id temporal it will be rewriten when I will refactory lobby system
 		// In future it should only return error.
-		c.lobbyHandler = c.LobbyService.Join(1, c.Info, c.createSendClientMessageFn(ctx))
+		c.lobbyHandler = c.LobbyService.Join(1, c.info, c.createSendClientMessageFn(ctx))
 		if c.lobbyHandler == nil {
 			return fmt.Errorf("could not join lobby")
 		}

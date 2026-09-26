@@ -18,19 +18,19 @@ type ConnectClientMessage struct {
 	sendFn SendClientMessage
 }
 
-type LobbyService struct {
+type LobbyManager struct {
 	lobbies map[int]*Lobby
 }
 
-func NewLobbyService() *LobbyService {
+func NewLobbyManager() *LobbyManager {
 	lobbies := make(map[int]*Lobby)
 	lobbies[1] = NewLobby("unsafe test lobby")
-	return &LobbyService{lobbies: lobbies}
+	return &LobbyManager{lobbies: lobbies}
 }
 
-func (ls *LobbyService) Create() {}
+func (ls *LobbyManager) Create() {}
 
-func (ls *LobbyService) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) *LobbyHandler {
+func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) *LobbyHandler {
 	lobby, _ := ls.lobbies[lobbyId]
 	return lobby.AddClient(ConnectClientMessage{
 		info:   info,
@@ -38,11 +38,11 @@ func (ls *LobbyService) Join(lobbyId int, info ClientInfo, sendFn SendClientMess
 	})
 }
 
-func (ls *LobbyService) Leave() {}
+func (ls *LobbyManager) Leave() {}
 
-func (ls *LobbyService) HandleAction() {}
+func (ls *LobbyManager) HandleAction() {}
 
-func (ls *LobbyService) SendMessage(lobbyId int, message LobbyMessege) {}
+func (ls *LobbyManager) SendMessage(lobbyId int, message LobbyMessege) {}
 
 type LobbyClient struct {
 	// id int

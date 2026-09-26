@@ -3,16 +3,12 @@ package main
 import (
 	"log"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/ellezio/gomber/internal/game"
 	"github.com/gorilla/websocket"
 )
 
-var lobbyService = game.NewLobbyService()
-var nextId atomic.Int32
-
-func setupRoutes() {
+func setupRoutes(gameServer *game.Server) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/index.html")
 	})
@@ -29,7 +25,6 @@ func setupRoutes() {
 			return
 		}
 
-		client := game.NewClient(int(nextId.Add(1)), lobbyService)
-		client.Serve(conn)
+		gameServer.ServeClient(conn)
 	})
 }
