@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 )
@@ -12,11 +13,43 @@ type LobbyMessege interface {
 	iLobbyMessege()
 }
 
-func (ConnectClientMessage) iLobbyMessege() {}
+func (ConnectClientMessage) iLobbyMessege()    {}
+func (DisconnectClientMessage) iLobbyMessege() {}
+func (RunGameMessage) iLobbyMessege()          {}
+func (SetMapMessage) iLobbyMessege()           {}
+func (GameFinishedMessage) iLobbyMessege()     {}
+func (ClientInpuMessage) iLobbyMessege()       {}
 
 type ConnectClientMessage struct {
-	info   ClientInfo
-	sendFn SendClientMessage
+	info     ClientInfo
+	sendFn   SendClientMessage
+	response chan<- LobbyResponse
+}
+
+type DisconnectClientMessage struct {
+	clientID int
+}
+
+type RunGameMessage struct {
+	clientID int
+	response chan<- LobbyResponse
+}
+
+type SetMapMessage struct {
+	clientID int
+	mapName  string
+}
+
+type GameFinishedMessage struct {
+	gameResult GameResult
+}
+
+type LobbyResponse struct {
+	err error
+}
+
+type ClientInpuMessage struct {
+	ClientInputEvent
 }
 
 type LobbyManager struct {
@@ -26,22 +59,27 @@ type LobbyManager struct {
 }
 
 func NewLobbyManager() *LobbyManager {
-	lobbies := make(map[int]*Lobby)
-	return &LobbyManager{lobbies: lobbies}
+	lm := &LobbyManager{lobbies: make(map[int]*Lobby)}
+	lm.Create("lobby name")
+	return lm
 }
 
-func (ls *LobbyManager) CreateAndJoin(name string, clientInfo ClientInfo, sendFn SendClientMessage) *LobbyHandler {
+func (ls *LobbyManager) Create(name string) {
 	lobby := NewLobby(name)
 
 	ls.mu.Lock()
-	ls.lobbies[ls.nextID] = lobby
+	lobbyID := ls.nextID
+	ls.lobbies[lobbyID] = lobby
 	ls.nextID++
 	ls.mu.Unlock()
 
-	return lobby.AddClient(ConnectClientMessage{
-		info:   clientInfo,
-		sendFn: sendFn,
-	})
+	go func() {
+		lobby.Start()
+
+		ls.mu.Lock()
+		delete(ls.lobbies, lobbyID)
+		ls.mu.Unlock()
+	}()
 }
 
 func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) (*LobbyHandler, error) {
@@ -49,21 +87,43 @@ func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMess
 	lobby, ok := ls.lobbies[lobbyId]
 	ls.mu.Unlock()
 
-	if !ok {
+	if !ok || lobby.state.Load() == state_closing {
 		return nil, errors.New("Lobby not exists")
 	}
 
-	return lobby.AddClient(ConnectClientMessage{
-		info:   info,
-		sendFn: sendFn,
-	}), nil
+	responseCh := make(chan LobbyResponse)
+	msg := ConnectClientMessage{
+		info:     info,
+		sendFn:   sendFn,
+		response: responseCh,
+	}
+
+	select {
+	case <-lobby.done:
+		return nil, errors.New("Lobby not exists")
+	case lobby.ch <- msg:
+	}
+
+	select {
+	case <-lobby.done:
+		return nil, errors.New("Lobby not exists")
+	case response := <-responseCh:
+		if response.err != nil {
+			return nil, response.err
+		}
+	}
+
+	lobbyHandler := &LobbyHandler{
+		clientID: info.Id,
+		lobbyCh:  lobby.ch,
+	}
+
+	return lobbyHandler, nil
 }
 
 type LobbyClient struct {
-	// id int
 	sendFn SendClientMessage
 
-	// client   *ClientSession
 	clientId int
 	name     string
 	latency  int
@@ -80,26 +140,103 @@ type LobbyState struct {
 	Clients []ClientInfo `json:"clients"`
 }
 
+const (
+	messageQueueSize = 64
+)
+
+const (
+	state_inLobby int32 = iota
+	state_inGame
+	state_closing
+)
+
 type Lobby struct {
 	name    string
-	clients map[int]LobbyClient
-	lastId  atomic.Int64
-	mu      sync.RWMutex
+	clients map[int]*LobbyClient
 
 	// tmp game props
 	eventCh chan ClientEvent
-	game    *Game
+	state   atomic.Int32
+
+	ch      chan LobbyMessege
+	gameMap string
+	done    chan struct{}
 }
 
 func NewLobby(name string) *Lobby {
 	return &Lobby{
 		name:    name,
-		clients: map[int]LobbyClient{},
+		clients: map[int]*LobbyClient{},
 		eventCh: make(chan ClientEvent),
+		ch:      make(chan LobbyMessege, messageQueueSize),
+		done:    make(chan struct{}),
+
+		// TODO: remove when added map picker
+		gameMap: "board1",
 	}
 }
 
-func (l *Lobby) AddClient(connClientMsg ConnectClientMessage) *LobbyHandler {
+func (l *Lobby) Start() {
+	defer close(l.done)
+
+	for msg := range l.ch {
+		stop := l.handleMessage(msg)
+		if stop {
+			break
+		}
+	}
+
+	for {
+		select {
+		case msg := <-l.ch:
+			l.handleMessage(msg)
+		default:
+			return
+		}
+	}
+}
+
+func (l *Lobby) handleMessage(message LobbyMessege) bool {
+	switch msg := message.(type) {
+	case ConnectClientMessage:
+		err := l.connectClient(msg)
+		msg.response <- LobbyResponse{err: err}
+
+	case DisconnectClientMessage:
+		l.removeClient(msg.clientID)
+		if len(l.clients) == 0 {
+			l.state.Store(state_closing)
+			return true
+		}
+
+	case RunGameMessage:
+		err := l.runGame(msg.clientID)
+		msg.response <- LobbyResponse{err: err}
+
+	case SetMapMessage:
+		l.setMap(msg.mapName)
+
+	case GameFinishedMessage:
+		l.broadcaseClientMessage(msg.gameResult)
+
+	case ClientInpuMessage:
+		l.handleClientInput(msg.ClientInputEvent)
+
+	default:
+		slog.Error("unexpected game.LobbyMessege", "message", msg)
+	}
+
+	return false
+}
+
+func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
+	switch l.state.Load() {
+	case state_inGame:
+		return errors.New("cannot join, game is running")
+	case state_closing:
+		return errors.New("cannot join, lobby just closed")
+	}
+
 	lc := LobbyClient{
 		clientId: connClientMsg.info.Id,
 		name:     connClientMsg.info.Name,
@@ -111,92 +248,84 @@ func (l *Lobby) AddClient(connClientMsg ConnectClientMessage) *LobbyHandler {
 		lc.Admin = true
 	}
 
-	l.mu.Lock()
-	l.clients[lc.clientId] = lc
-	l.mu.Unlock()
-
-	lh := LobbyHandler{
-		clientId: lc.clientId,
-		lobby:    l,
-	}
+	l.clients[lc.clientId] = &lc
 
 	ls := l.State()
 
-	l.mu.Lock()
-	for _, c := range l.clients {
-		if c.clientId != lc.clientId {
-			c.sendFn(ls)
-		}
-	}
-	l.mu.Unlock()
+	l.broadcaseClientMessage(ls)
 
-	return &lh
+	return nil
 }
 
-func (l *Lobby) RemoveClient(clientId int) {
-	l.mu.Lock()
-	delete(l.clients, clientId)
-	l.mu.Unlock()
+func (l *Lobby) removeClient(clientID int) {
+	chooseAdmin := l.clients[clientID].Admin
+
+	delete(l.clients, clientID)
 
 	ls := l.State()
 
-	l.mu.Lock()
 	for _, c := range l.clients {
+		if chooseAdmin {
+			c.Admin = true
+			chooseAdmin = false
+		}
+
 		c.sendFn(ls)
 	}
-	l.mu.Unlock()
+
+	if l.state.Load() == state_inGame {
+		l.eventCh <- ClientLeftEvent{Id: clientID}
+	}
 }
 
-func (l *Lobby) SetMap(mapName string) {}
+func (l *Lobby) setMap(mapName string) {
+	l.gameMap = mapName
+}
 
-func (l *Lobby) RunGame(clientId int) {
+func (l *Lobby) runGame(clientId int) error {
+	switch l.state.Load() {
+	case state_inGame:
+		return errors.New("game is already running")
+	case state_closing:
+		return errors.New("lobby just closed")
+	}
+
+	client, ok := l.clients[clientId]
+	if !ok {
+		return errors.New("not in lobby")
+	}
+
+	if !client.Admin {
+		return errors.New("only admin can start game")
+	}
+
 	for len(l.eventCh) > 0 {
 		<-l.eventCh
 	}
 
-	l.game = NewGame(l.eventCh)
+	gameMap := l.gameMap
+
 	go func() {
-		gr := l.game.Run("board1")
-		l.game = nil
-		l.mu.Lock()
-		for _, c := range l.clients {
-			c.sendFn(gr)
+		game := NewGame(l.eventCh)
+		l.state.Store(state_inGame)
+		gr := game.Run(gameMap)
+
+		if l.state.Load() == state_closing {
+			return
 		}
-		l.mu.Unlock()
+
+		l.state.Store(state_inLobby)
+		l.ch <- GameFinishedMessage{gameResult: gr}
 	}()
 
-	l.mu.Lock()
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.clientId, Notifier: &c, Name: c.name}
+		l.eventCh <- ClientConnectedEvent{ClientId: c.clientId, Notifier: c, Name: c.name}
 	}
-	l.mu.Unlock()
-}
 
-func (l *Lobby) ConnectToGame(clientId int) {
-	l.mu.RLock()
-	client := l.clients[clientId]
-	l.mu.RUnlock()
-
-	l.eventCh <- ClientConnectedEvent{ClientId: clientId, Notifier: &client, Name: client.name}
-}
-
-func (l *Lobby) RequestState(clientId int) {
-	l.mu.RLock()
-	client := l.clients[clientId]
-	l.mu.RUnlock()
-
-	ls := l.State()
-	client.sendFn(ls)
-
-	if l.game != nil {
-		l.ConnectToGame(clientId)
-	}
+	return nil
 }
 
 func (l *Lobby) State() LobbyState {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
 	ls := LobbyState{}
 	ls.Name = l.name
 	for _, c := range l.clients {
@@ -206,33 +335,38 @@ func (l *Lobby) State() LobbyState {
 	return ls
 }
 
+func (l *Lobby) broadcaseClientMessage(msg ClientMessage) {
+	for _, c := range l.clients {
+		c.sendFn(msg)
+	}
+}
+
+func (l *Lobby) handleClientInput(inp ClientInputEvent) {
+	if l.eventCh != nil && l.state.Load() == state_inGame {
+		l.eventCh <- inp
+	}
+}
+
 type LobbyHandler struct {
-	clientId int
-	lobby    *Lobby
+	clientID int
+	lobbyCh  chan<- LobbyMessege
 }
 
 func (lh *LobbyHandler) Disconnect() {
-	if lh.lobby == nil {
-		return
+	lh.lobbyCh <- DisconnectClientMessage{
+		clientID: lh.clientID,
 	}
-	lh.lobby.RemoveClient(lh.clientId)
-	if lh.lobby.game != nil {
-		lh.lobby.eventCh <- ClientLeftEvent{Id: lh.clientId}
-	}
+
 }
 
-func (lh *LobbyHandler) RequestState() {
-	if lh.lobby == nil {
-		return
+func (lh *LobbyHandler) RunGame() error {
+	responseCh := make(chan LobbyResponse)
+	lh.lobbyCh <- RunGameMessage{
+		clientID: lh.clientID,
+		response: responseCh,
 	}
-	lh.lobby.RequestState(lh.clientId)
-}
-
-func (lh *LobbyHandler) RunGame() {
-	if lh.lobby == nil {
-		return
-	}
-	lh.lobby.RunGame(lh.clientId)
+	response := <-responseCh
+	return response.err
 }
 
 func (lh *LobbyHandler) HandleInput(p []byte) {
@@ -242,8 +376,11 @@ func (lh *LobbyHandler) HandleInput(p []byte) {
 		log.Println(err)
 		return
 	}
-	lh.lobby.eventCh <- ClientInputEvent{
-		Id:    lh.clientId,
-		Input: input,
+
+	lh.lobbyCh <- ClientInpuMessage{
+		ClientInputEvent: ClientInputEvent{
+			Id:    lh.clientID,
+			Input: input,
+		},
 	}
 }

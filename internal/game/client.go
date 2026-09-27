@@ -288,13 +288,12 @@ func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 
 		var err error
 		sendFn := c.createSendClientMessageFn(ctx)
+
 		// TODO: when there will be lobby selection menu replace it with proper id
-		// and handle case when lobby not exists.
 		c.lobbyHandler, err = c.LobbyManager.Join(0, c.info, sendFn)
 		if err != nil {
-			c.lobbyHandler = c.LobbyManager.CreateAndJoin("lobby name", c.info, sendFn)
+			return err
 		}
-		c.lobbyHandler.RequestState()
 	case bytes.Equal(p, []byte("game:start")):
 		if c.lobbyHandler == nil {
 			return fmt.Errorf("could not start game: not in lobby")
