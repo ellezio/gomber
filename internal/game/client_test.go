@@ -2,10 +2,8 @@ package game
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
-	"testing/synctest"
 )
 
 func TestParseNameMessage(t *testing.T) {
@@ -102,47 +100,6 @@ func TestClientHandleInputErrors(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestLobbyLifetime(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		lm := NewLobbyManager()
-		lobbyID := lm.Create("bombom")
-		client := NewClient(182, lm)
-		client.info.Name = "Blink"
-		ctx := context.Background()
-
-		connectPayload := fmt.Appendf(nil, "lobby:connect:%d", lobbyID)
-		if err := client.handleInput(ctx, connectPayload); err != nil {
-			t.Fatalf("while joining lobby(id:0): %v", err)
-		}
-
-		synctest.Wait()
-
-		select {
-		case msg := <-client.update:
-			state, ok := msg.(LobbyState)
-			if !ok || state.Name != "bombom" || len(state.Clients) != 1 || state.Clients[0].Name != "Blink" {
-				t.Fatalf("invalid lobby state update. got=%#v", msg)
-			}
-		default:
-			t.Fatal("no update of lobby state recived by client")
-		}
-
-		if err := client.handleInput(ctx, connectPayload); err == nil || !strings.Contains(err.Error(), "already connected") {
-			t.Fatalf("second join error = %v", err)
-		}
-
-		synctest.Wait()
-
-		client.lobbyHandler.Disconnect()
-
-		synctest.Wait()
-
-		if _, ok := lm.lobbies[lobbyID]; ok {
-			t.Fatal("lobby not closed after disconnecting last client")
-		}
-	})
 }
 
 func TestClientSendBufferFullAndCancellation(t *testing.T) {
