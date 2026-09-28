@@ -285,16 +285,23 @@ func (c *ClientSession) measurePingLatency(pingID string) error {
 
 func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 	switch {
-	case bytes.Equal(p, []byte("lobby:connect")):
+	case bytes.HasPrefix(p, []byte("lobby:connect")):
 		if c.lobbyHandler != nil {
-			return fmt.Errorf("client is already connected to a lobby")
+			return errors.New("client is already connected to a lobby")
 		}
 
-		var err error
+		if len(p) < 15 || p[13] != ':' {
+			return errors.New("invalid lobby id")
+		}
+
+		lobbyID, err := strconv.Atoi(string(p[14:]))
+		if err != nil {
+			return errors.New("invalid lobby id")
+		}
+
 		sendFn := c.createSendClientMessageFn(ctx)
 
-		// TODO: when there will be lobby selection menu replace it with proper id
-		c.lobbyHandler, err = c.LobbyManager.Join(0, c.info, sendFn)
+		c.lobbyHandler, err = c.LobbyManager.Join(lobbyID, c.info, sendFn)
 		if err != nil {
 			return err
 		}

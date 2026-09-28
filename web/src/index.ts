@@ -63,7 +63,8 @@ class Client {
       this.game.clients = this.lobby.state.clients;
       this.game.start();
     };
-    this.conn.send("lobby:connect");
+    // TEST: this is temporal id meant for development
+    this.conn.send("lobby:connect:0");
   }
 
   async askName() {

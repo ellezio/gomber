@@ -66,11 +66,11 @@ type LobbyManager struct {
 
 func NewLobbyManager() *LobbyManager {
 	lm := &LobbyManager{lobbies: make(map[int]*Lobby)}
-	lm.Create("lobby name")
+	// lm.Create("lobby name")
 	return lm
 }
 
-func (ls *LobbyManager) Create(name string) {
+func (ls *LobbyManager) Create(name string) int {
 	lobby := NewLobby(name)
 
 	ls.mu.Lock()
@@ -86,6 +86,8 @@ func (ls *LobbyManager) Create(name string) {
 		delete(ls.lobbies, lobbyID)
 		ls.mu.Unlock()
 	}()
+
+	return lobbyID
 }
 
 func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) (*LobbyHandler, error) {
@@ -376,7 +378,6 @@ func (lh *LobbyHandler) Disconnect() {
 	lh.lobbyCh <- DisconnectClientMessage{
 		clientID: lh.clientID,
 	}
-
 }
 
 func (lh *LobbyHandler) RunGame() error {
