@@ -270,9 +270,13 @@ func (c *ClientSession) measurePingLatency(pingID string) error {
 
 	if l, ok := c.latencyTracker[int(id)]; ok {
 		delete(c.latencyTracker, int(id))
-		ms := time.Since(l).Milliseconds()
-		// TODO: update the lobby about new latency - do it when refactoring lobby system
-		c.info.Latency = int(ms)
+		latency := int(time.Since(l).Milliseconds())
+
+		if c.lobbyHandler != nil {
+			c.lobbyHandler.UpdateLatency(latency)
+		}
+
+		c.info.Latency = latency
 		return nil
 	}
 
@@ -298,7 +302,9 @@ func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 		if c.lobbyHandler == nil {
 			return fmt.Errorf("could not start game: not in lobby")
 		}
-		c.lobbyHandler.RunGame()
+		if err := c.lobbyHandler.RunGame(); err != nil {
+			return fmt.Errorf("could not start game: %w", err)
+		}
 	default:
 		if c.lobbyHandler == nil {
 			return fmt.Errorf("could not process game input: not in lobby")

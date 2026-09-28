@@ -19,6 +19,7 @@ func (RunGameMessage) iLobbyMessege()          {}
 func (SetMapMessage) iLobbyMessege()           {}
 func (GameFinishedMessage) iLobbyMessege()     {}
 func (ClientInpuMessage) iLobbyMessege()       {}
+func (UpdateClientMessage) iLobbyMessege()     {}
 
 type ConnectClientMessage struct {
 	info     ClientInfo
@@ -42,6 +43,11 @@ type SetMapMessage struct {
 
 type GameFinishedMessage struct {
 	gameResult GameResult
+}
+
+type UpdateClientMessage struct {
+	clientID int
+	latency  int
 }
 
 type LobbyResponse struct {
@@ -124,7 +130,7 @@ func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMess
 type LobbyClient struct {
 	sendFn SendClientMessage
 
-	clientId int
+	clientID int
 	name     string
 	latency  int
 
@@ -222,11 +228,25 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 	case ClientInpuMessage:
 		l.handleClientInput(msg.ClientInputEvent)
 
+	case UpdateClientMessage:
+		l.updateClient(msg)
+
 	default:
 		slog.Error("unexpected game.LobbyMessege", "message", msg)
 	}
 
 	return false
+}
+
+func (l *Lobby) updateClient(msg UpdateClientMessage) {
+	// Just ignore if client is not found because client has to
+	// join to lobby to be able to send this message.
+	if client, ok := l.clients[msg.clientID]; ok {
+		client.latency = msg.latency
+	}
+
+	ls := l.State()
+	l.broadcaseClientMessage(ls)
 }
 
 func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
@@ -238,7 +258,7 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 	}
 
 	lc := LobbyClient{
-		clientId: connClientMsg.info.Id,
+		clientID: connClientMsg.info.Id,
 		name:     connClientMsg.info.Name,
 		latency:  connClientMsg.info.Latency,
 		sendFn:   connClientMsg.sendFn,
@@ -248,7 +268,7 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 		lc.Admin = true
 	}
 
-	l.clients[lc.clientId] = &lc
+	l.clients[lc.clientID] = &lc
 
 	ls := l.State()
 
@@ -319,7 +339,7 @@ func (l *Lobby) runGame(clientId int) error {
 	}()
 
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.clientId, Notifier: c, Name: c.name}
+		l.eventCh <- ClientConnectedEvent{ClientId: c.clientID, Notifier: c, Name: c.name}
 	}
 
 	return nil
@@ -329,7 +349,7 @@ func (l *Lobby) State() LobbyState {
 	ls := LobbyState{}
 	ls.Name = l.name
 	for _, c := range l.clients {
-		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientId, Name: c.name, Latency: c.latency})
+		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency})
 	}
 
 	return ls
@@ -367,6 +387,20 @@ func (lh *LobbyHandler) RunGame() error {
 	}
 	response := <-responseCh
 	return response.err
+}
+
+func (lh *LobbyHandler) UpdateLatency(latency int) {
+	msg := UpdateClientMessage{
+		clientID: lh.clientID,
+		latency:  latency,
+	}
+
+	// there is no need to block client when channel is blocked
+	// as this information is not critical for lobby to know
+	select {
+	case lh.lobbyCh <- msg:
+	default:
+	}
 }
 
 func (lh *LobbyHandler) HandleInput(p []byte) {
