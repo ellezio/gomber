@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 )
 
 func TestParseNameMessage(t *testing.T) {
@@ -67,8 +69,6 @@ func TestParseNameMessage(t *testing.T) {
 
 func TestClientHandleInputErrors(t *testing.T) {
 	lm := NewLobbyManager()
-	lm.Create("bombom")
-
 	client := NewClient(7, lm)
 	client.info.Name = "Jojo"
 
@@ -127,21 +127,24 @@ func TestClientSendBufferFullAndCancellation(t *testing.T) {
 }
 
 func TestClientPingLatency(t *testing.T) {
-	client := NewClient(1, nil)
-	id := client.registerPing()
-	if err := client.measurePingLatency(id); err != nil {
-		t.Fatalf("measure registered ping: %v", err)
-	}
-	if len(client.latencyTracker) != 0 || client.info.Latency < 0 {
-		t.Fatalf("ping tracker = %v, latency = %d", client.latencyTracker, client.info.Latency)
-	}
-	if err := client.measurePingLatency(id); err == nil {
-		t.Fatal("measuring a consumed ping should fail")
-	}
-	client.registerPing()
-	if err := client.measurePingLatency("invalid"); err == nil || len(client.latencyTracker) != 0 {
-		t.Fatalf("invalid pong: error = %v, tracker = %v", err, client.latencyTracker)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		client := NewClient(1, nil)
+		id := client.registerPing()
+		time.Sleep(100 * time.Millisecond)
+		if err := client.measurePingLatency(id); err != nil {
+			t.Fatalf("measure registered ping: %v", err)
+		}
+		if len(client.latencyTracker) != 0 || client.info.Latency != 100 {
+			t.Fatalf("ping tracker = %v, latency = %d", client.latencyTracker, client.info.Latency)
+		}
+		if err := client.measurePingLatency(id); err == nil {
+			t.Fatal("measuring a consumed ping should fail")
+		}
+		client.registerPing()
+		if err := client.measurePingLatency("invalid"); err == nil || len(client.latencyTracker) != 0 {
+			t.Fatalf("invalid pong: error = %v, tracker = %v", err, client.latencyTracker)
+		}
+	})
 }
 
 type theWorld struct{}

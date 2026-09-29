@@ -13,30 +13,27 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func dialTestClient(t *testing.T, server *Server) (*websocket.Conn, func()) {
+func dialTestClient(t *testing.T, server *Server) *websocket.Conn {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
-	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testServer := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
 		server.ServeClient(conn)
 	}))
-	serverClosed := false
-	closeServer := func() {
-		if !serverClosed {
-			testServer.Close()
-			serverClosed = true
-		}
-	}
-	t.Cleanup(closeServer)
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(testServer.URL, "http"), nil)
+	t.Cleanup(testServer.Close)
+
+	transport, _ := testServer.Client().Transport.(*http.Transport)
+	dialer := websocket.Dialer{NetDialContext: transport.DialContext}
+	conn, _, err := dialer.Dial("ws://example.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return conn, closeServer
+
+	return conn
 }
 
 func readServerMessage(t *testing.T, conn *websocket.Conn) (string, json.RawMessage) {
@@ -54,12 +51,13 @@ func readServerMessage(t *testing.T, conn *websocket.Conn) (string, json.RawMess
 func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		server := NewServer()
-		lobbyID := server.lobbies.Create("test")
-		lobby := server.lobbies.lobbies[0]
-		conn, closeServer := dialTestClient(t, server)
+		conn := dialTestClient(t, server)
 		if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {
 			t.Fatal(err)
 		}
+
+		lobbyID := server.lobbies.Create("test")
+		lobby := server.lobbies.lobbies[lobbyID]
 
 		msgType, details := readServerMessage(t, conn)
 		if msgType != "ok" || string(details) != `"name"` {
@@ -80,9 +78,6 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
 			t.Fatal(err)
 		}
-
-		// on synctest.Wait() tests freeze
-		closeServer()
 
 		synctest.Wait()
 
@@ -115,7 +110,7 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			conn, _ := dialTestClient(t, NewServer())
+			conn := dialTestClient(t, NewServer())
 
 			if tt.validNameFirst {
 				if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {
@@ -136,7 +131,7 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 }
 
 func TestWebSocketLimitsMessageSize(t *testing.T) {
-	conn, _ := dialTestClient(t, NewServer())
+	conn := dialTestClient(t, NewServer())
 
 	if err := conn.WriteMessage(websocket.TextMessage, []byte("name:"+strings.Repeat("a", maxMessageSize))); err != nil {
 		t.Fatal(err)
