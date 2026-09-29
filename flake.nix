@@ -14,7 +14,7 @@
       with pkgs;
       {
         devShells.default = mkShell {
-          buildInputs = [ go gopls ];
+          buildInputs = [ go_1_27 gopls ];
         };
       }
     );
