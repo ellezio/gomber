@@ -38,6 +38,9 @@ func (GameResult) iClientMessage()      {}
 func (NameMessage) iClientMessage()     {}
 func (ErrorMessage) iClientMessage()    {}
 func (LobbyClosed) iClientMessage()     {}
+func (Lobbies) iClientMessage()         {}
+
+type Lobbies []*LobbyInfo
 
 type NameMessage struct {
 	value string
@@ -305,11 +308,19 @@ func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 	switch {
 	case bytes.HasPrefix(p, []byte("lobby:connect")):
 		return c.handleLobbyConectMessage(ctx, p)
+	case bytes.HasPrefix(p, []byte("lobby:list")):
+		return c.handleGetLobbyList(ctx)
 	case bytes.Equal(p, []byte("game:start")):
 		return c.handleGameStartMessage()
 	default:
 		return c.handleGameInputMessage(p)
 	}
+}
+
+func (c *ClientSession) handleGetLobbyList(ctx context.Context) error {
+	lobbies := c.LobbyManager.Lobbies()
+	c.send(ctx, Lobbies(lobbies))
+	return nil
 }
 
 func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, p []byte) error {
@@ -453,6 +464,12 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 	case LobbyClosed:
 		msg = Message{
 			Type: "lobbyClosed",
+		}
+
+	case Lobbies:
+		msg = Message{
+			Type:    "lobbyList",
+			Details: m,
 		}
 
 	// TODO: This is some old workaround - to handle when refactoring Game logic.

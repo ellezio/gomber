@@ -142,3 +142,57 @@ func TestWebSocketLimitsMessageSize(t *testing.T) {
 		t.Fatalf("read error = %v, want message-too-big close", err)
 	}
 }
+
+func TestGetLobbies(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		server := NewServer()
+		conn := dialTestClient(t, server)
+
+		names := []string{"one", "two", "three"}
+		ids := make([]int, len(names))
+		for idx, name := range names {
+			ids[idx] = server.lobbies.Create(name)
+		}
+		t.Cleanup(func() {
+			for _, id := range ids {
+				_ = server.lobbies.Close(id, 0)
+			}
+		})
+
+		if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {
+			t.Fatal(err)
+		}
+		readServerMessage(t, conn)
+
+		if err := conn.WriteMessage(websocket.TextMessage, []byte("lobby:list")); err != nil {
+			t.Fatal(err)
+		}
+		msgType, msgDetails := readServerMessage(t, conn)
+
+		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+			t.Fatal(err)
+		}
+
+		if msgType != "lobbyList" {
+			t.Fatalf("wrong server message. got=%q, want=%q", msgType, "lobbyList")
+		}
+
+		var lobbies Lobbies
+		if err := json.Unmarshal(msgDetails, &lobbies); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(lobbies) != len(names) {
+			t.Fatalf("wrong number of lobbies returned. got=%d, want=%d", len(lobbies), len(names))
+		}
+
+		for idx, lobby := range lobbies {
+			if lobby.ID != ids[idx] {
+				t.Errorf("(idx:%d) wrong lobby id. got=%d, want=%d", idx, lobby.ID, ids[idx])
+			}
+			if lobby.Name != names[idx] {
+				t.Errorf("(idx:%d) wrong lobby name. got=%s, want=%s", idx, lobby.Name, names[idx])
+			}
+		}
+	})
+}

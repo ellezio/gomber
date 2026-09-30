@@ -67,10 +67,10 @@ type ClientInpuMessage struct {
 }
 
 type LobbyInfo struct {
-	ID          int
-	Name        string
-	ClientCount int
-	State       int32
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	ClientCount int    `json:"client_count"`
+	State       int32  `json:"state"`
 	lobby       *Lobby
 }
 
