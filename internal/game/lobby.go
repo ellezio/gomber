@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -20,6 +22,7 @@ func (SetMapMessage) iLobbyMessege()           {}
 func (GameFinishedMessage) iLobbyMessege()     {}
 func (ClientInpuMessage) iLobbyMessege()       {}
 func (UpdateClientMessage) iLobbyMessege()     {}
+func (CloseLobbyMessage) iLobbyMessege()       {}
 
 type ConnectClientMessage struct {
 	info     ClientInfo
@@ -50,6 +53,11 @@ type UpdateClientMessage struct {
 	latency  int
 }
 
+type CloseLobbyMessage struct {
+	clientID int
+	response chan<- LobbyResponse
+}
+
 type LobbyResponse struct {
 	err error
 }
@@ -58,48 +66,71 @@ type ClientInpuMessage struct {
 	ClientInputEvent
 }
 
+type LobbyInfo struct {
+	ID          int
+	Name        string
+	ClientCount int
+	State       int32
+	lobby       *Lobby
+}
+
 type LobbyManager struct {
 	mu      sync.RWMutex
-	lobbies map[int]*Lobby
+	lobbies map[int]*LobbyInfo
 	nextID  int
 }
 
 func NewLobbyManager() *LobbyManager {
-	lm := &LobbyManager{lobbies: make(map[int]*Lobby)}
+	lm := &LobbyManager{lobbies: make(map[int]*LobbyInfo)}
 	// lm.Create("lobby name")
 	return lm
 }
 
-func (ls *LobbyManager) Create(name string) int {
+func (lm *LobbyManager) Create(name string) int {
 	lobby := NewLobby(name)
+	lobbyInfo := &LobbyInfo{Name: name, lobby: lobby}
 
-	ls.mu.Lock()
-	lobbyID := ls.nextID
-	ls.lobbies[lobbyID] = lobby
-	ls.nextID++
-	ls.mu.Unlock()
+	lm.mu.Lock()
+	lobbyInfo.ID = lm.nextID
+	lm.lobbies[lm.nextID] = lobbyInfo
+	lm.nextID++
+	lm.mu.Unlock()
 
 	go func() {
 		lobby.Start()
 
-		ls.mu.Lock()
-		delete(ls.lobbies, lobbyID)
-		ls.mu.Unlock()
+		lm.mu.Lock()
+		delete(lm.lobbies, lobbyInfo.ID)
+		lm.mu.Unlock()
 	}()
 
-	return lobbyID
+	return lobbyInfo.ID
 }
 
-func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMessage) (*LobbyHandler, error) {
-	ls.mu.Lock()
-	lobby, ok := ls.lobbies[lobbyId]
-	ls.mu.Unlock()
+func (lm *LobbyManager) getLobby(lobbyID int) (*Lobby, error) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
 
-	if !ok || lobby.state.Load() == state_closing {
+	lobbyInfo, ok := lm.lobbies[lobbyID]
+	if !ok || lobbyInfo.lobby.state.Load() == state_closing {
 		return nil, errors.New("Lobby not exists")
 	}
 
-	responseCh := make(chan LobbyResponse)
+	return lobbyInfo.lobby, nil
+}
+
+func (lm *LobbyManager) Join(lobbyID int, info ClientInfo, sendFn SendClientMessage) (*LobbyHandler, error) {
+	lobby, err := lm.getLobby(lobbyID)
+	if err != nil {
+		return nil, err
+	}
+
+	lobbyHandler := &LobbyHandler{
+		clientID: info.Id,
+		lobbyCh:  lobby.ch,
+	}
+
+	responseCh := make(chan LobbyResponse, 1)
 	msg := ConnectClientMessage{
 		info:     info,
 		sendFn:   sendFn,
@@ -121,12 +152,41 @@ func (ls *LobbyManager) Join(lobbyId int, info ClientInfo, sendFn SendClientMess
 		}
 	}
 
-	lobbyHandler := &LobbyHandler{
-		clientID: info.Id,
-		lobbyCh:  lobby.ch,
+	return lobbyHandler, nil
+}
+
+func (lm *LobbyManager) Close(lobbyID int, clientID int) error {
+	responseCh := make(chan LobbyResponse, 1)
+	lobby, err := lm.getLobby(lobbyID)
+	if err != nil {
+		return err
+	}
+	msg := CloseLobbyMessage{clientID: clientID, response: responseCh}
+
+	select {
+	case <-lobby.done:
+		return errors.New("Lobby not exists")
+	case lobby.ch <- msg:
 	}
 
-	return lobbyHandler, nil
+	select {
+	case <-lobby.done:
+		return nil
+	case response := <-responseCh:
+		if response.err != nil {
+			return response.err
+		}
+	}
+
+	return nil
+}
+
+func (lm *LobbyManager) Lobbies() []*LobbyInfo {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+
+	lobbies := slices.SortedFunc(maps.Values(lm.lobbies), func(a, b *LobbyInfo) int { return a.ID - b.ID })
+	return lobbies
 }
 
 type LobbyClient struct {
@@ -232,6 +292,13 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 
 	case UpdateClientMessage:
 		l.updateClient(msg)
+
+	case CloseLobbyMessage:
+		err := l.close(msg.clientID)
+		msg.response <- LobbyResponse{err: err}
+		if err == nil {
+			return true
+		}
 
 	default:
 		slog.Error("unexpected game.LobbyMessege", "message", msg)
@@ -348,8 +415,7 @@ func (l *Lobby) runGame(clientId int) error {
 }
 
 func (l *Lobby) State() LobbyState {
-	ls := LobbyState{}
-	ls.Name = l.name
+	ls := LobbyState{Name: l.name}
 	for _, c := range l.clients {
 		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency})
 	}
@@ -369,6 +435,27 @@ func (l *Lobby) handleClientInput(inp ClientInputEvent) {
 	}
 }
 
+func (l *Lobby) close(clientID int) error {
+	if len(l.clients) != 0 {
+		client, ok := l.clients[clientID]
+		if !ok {
+			return errors.New("client not in lobby")
+		}
+
+		if !client.Admin {
+			return errors.New("client is not lobby's admin")
+		}
+
+	}
+
+	l.state.Store(state_closing)
+	l.broadcaseClientMessage(LobbyClosed{})
+
+	return nil
+}
+
+var LobbyClosedErr = errors.New("lobby has been closed")
+
 type LobbyHandler struct {
 	clientID int
 	lobbyCh  chan<- LobbyMessege
@@ -381,7 +468,7 @@ func (lh *LobbyHandler) Disconnect() {
 }
 
 func (lh *LobbyHandler) RunGame() error {
-	responseCh := make(chan LobbyResponse)
+	responseCh := make(chan LobbyResponse, 1)
 	lh.lobbyCh <- RunGameMessage{
 		clientID: lh.clientID,
 		response: responseCh,
@@ -413,9 +500,7 @@ func (lh *LobbyHandler) HandleInput(p []byte) {
 	}
 
 	lh.lobbyCh <- ClientInpuMessage{
-		ClientInputEvent: ClientInputEvent{
-			Id:    lh.clientID,
-			Input: input,
-		},
+		Id:    lh.clientID,
+		Input: input,
 	}
 }

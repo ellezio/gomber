@@ -184,3 +184,32 @@ func TestLobbyForwardsInputOnlyDuringGame(t *testing.T) {
 		t.Fatal("input during game was not forwarded")
 	}
 }
+
+func TestGetLobbyList(t *testing.T) {
+	names := []string{"a", "few", "lobbies", "created"}
+	ids := make([]int, len(names))
+
+	lm := NewLobbyManager()
+	for i, name := range names {
+		ids[i] = lm.Create(name)
+	}
+
+	lobbies := lm.Lobbies()
+
+	if len(lobbies) != len(names) {
+		t.Fatalf("wrong number of lobbies. got=%d, want=%d", len(lobbies), len(names))
+	}
+
+	for i, lobby := range lobbies {
+		if lobby.Name != names[i] {
+			t.Fatalf("wrong lobby. got=%q, want=%q", lobby.Name, names[i])
+		}
+	}
+
+	for _, id := range ids {
+		err := lm.Close(id, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}

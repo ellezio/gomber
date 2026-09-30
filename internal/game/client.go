@@ -37,6 +37,7 @@ func (LobbyState) iClientMessage()      {}
 func (GameResult) iClientMessage()      {}
 func (NameMessage) iClientMessage()     {}
 func (ErrorMessage) iClientMessage()    {}
+func (LobbyClosed) iClientMessage()     {}
 
 type NameMessage struct {
 	value string
@@ -44,6 +45,9 @@ type NameMessage struct {
 
 type ErrorMessage struct {
 	value string
+}
+
+type LobbyClosed struct {
 }
 
 type ClientManager struct {
@@ -92,6 +96,11 @@ type ClientSession struct {
 	LobbyManager *LobbyManager
 	lobbyHandler *LobbyHandler
 
+	// TODO:
+	// This currently also lock the lobbyHandler which I don't want to
+	// I am leaving this for now but I have to think about some way to
+	// synchronously update ClientSession to not get into some nasy locking
+	// when it's not needed I might be easy deadlock by mistake
 	mu             sync.Mutex
 	latencyTracker map[int]time.Time
 	nextPingID     int
@@ -167,10 +176,12 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		}
 	}
 
+	c.mu.Lock()
 	if c.lobbyHandler != nil {
 		c.lobbyHandler.Disconnect()
 		c.lobbyHandler = nil
 	}
+	c.mu.Unlock()
 
 	cancel()
 	_ = conn.Close()
@@ -221,6 +232,13 @@ func (c *ClientSession) serveUpdates(
 			// bombarding the client with state update after falling behind to much.
 			return errors.New("update buffer is full")
 		case update := <-c.update:
+			// the clients updates should be chanded to client messages to be semantically corrent
+			if _, ok := update.(LobbyClosed); ok {
+				c.mu.Lock()
+				c.lobbyHandler = nil
+				c.mu.Unlock()
+			}
+
 			message, err := serializeMessage(update)
 			if err != nil {
 				return err
@@ -286,39 +304,62 @@ func (c *ClientSession) measurePingLatency(pingID string) error {
 func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
 	switch {
 	case bytes.HasPrefix(p, []byte("lobby:connect")):
-		if c.lobbyHandler != nil {
-			return errors.New("client is already connected to a lobby")
-		}
-
-		if len(p) < 15 || p[13] != ':' {
-			return errors.New("invalid lobby id")
-		}
-
-		lobbyID, err := strconv.Atoi(string(p[14:]))
-		if err != nil {
-			return errors.New("invalid lobby id")
-		}
-
-		sendFn := c.createSendClientMessageFn(ctx)
-
-		c.lobbyHandler, err = c.LobbyManager.Join(lobbyID, c.info, sendFn)
-		if err != nil {
-			return err
-		}
+		return c.handleLobbyConectMessage(ctx, p)
 	case bytes.Equal(p, []byte("game:start")):
-		if c.lobbyHandler == nil {
-			return fmt.Errorf("could not start game: not in lobby")
-		}
-		if err := c.lobbyHandler.RunGame(); err != nil {
-			return fmt.Errorf("could not start game: %w", err)
-		}
+		return c.handleGameStartMessage()
 	default:
-		if c.lobbyHandler == nil {
-			return fmt.Errorf("could not process game input: not in lobby")
-		}
-		c.lobbyHandler.HandleInput(p)
+		return c.handleGameInputMessage(p)
+	}
+}
+
+func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, p []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lobbyHandler != nil {
+		return errors.New("client is already connected to a lobby")
 	}
 
+	if len(p) < 15 || p[13] != ':' {
+		return errors.New("invalid lobby id")
+	}
+
+	lobbyID, err := strconv.Atoi(string(p[14:]))
+	if err != nil {
+		return errors.New("invalid lobby id")
+	}
+
+	sendFn := c.createSendClientMessageFn(ctx)
+
+	c.lobbyHandler, err = c.LobbyManager.Join(lobbyID, c.info, sendFn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *ClientSession) handleGameStartMessage() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lobbyHandler == nil {
+		return fmt.Errorf("could not start game: not in lobby")
+	}
+	if err := c.lobbyHandler.RunGame(); err != nil {
+		return fmt.Errorf("could not start game: %w", err)
+	}
+	return nil
+}
+
+func (c *ClientSession) handleGameInputMessage(p []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lobbyHandler == nil {
+		return fmt.Errorf("could not process game input: not in lobby")
+	}
+	c.lobbyHandler.HandleInput(p)
 	return nil
 }
 
@@ -407,6 +448,11 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 		msg = Message{
 			Type:    "error",
 			Details: m.value,
+		}
+
+	case LobbyClosed:
+		msg = Message{
+			Type: "lobbyClosed",
 		}
 
 	// TODO: This is some old workaround - to handle when refactoring Game logic.

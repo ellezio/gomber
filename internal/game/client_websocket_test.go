@@ -57,7 +57,7 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 		}
 
 		lobbyID := server.lobbies.Create("test")
-		lobby := server.lobbies.lobbies[lobbyID]
+		lobby := server.lobbies.lobbies[lobbyID].lobby
 
 		msgType, details := readServerMessage(t, conn)
 		if msgType != "ok" || string(details) != `"name"` {
