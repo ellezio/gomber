@@ -1,9 +1,11 @@
 import { boardUpdateMessage, Game } from "./game";
 import { Lobby, lobbyState } from "./lobby";
+import { LobbyItem, LobbyList } from "./lobbyList";
 
 type ServerMessage =
   | boardUpdateMessage
   | { type: "lobbyState"; details: lobbyState }
+  | { type: "lobbyList"; details: LobbyItem[] }
   | { type: "gameResult"; details: { winnerId: number } }
   | { type: "ok"; details: "name" };
 
@@ -11,6 +13,7 @@ class Client {
   conn: WebSocket;
   game: Game;
   lobby: Lobby;
+  lobbies: LobbyList;
   askNameResolve: (v: unknown) => void;
 
   connect() {
@@ -28,6 +31,9 @@ class Client {
           if (this.game != null) {
             this.game.clients = data.details.clients;
           }
+          break;
+        case "lobbyList":
+          this.lobbies?.handleMessage(data.details);
           break;
         case "gameResult":
           const client = this.lobby.state.clients.find(
@@ -54,7 +60,7 @@ class Client {
     }
   }
 
-  connectToLobby() {
+  connectToLobby(lobbyID: number) {
     this.lobby = new Lobby(document.body);
     this.lobby.ongamestart = () => {
       this.conn.send("game:start");
@@ -63,8 +69,15 @@ class Client {
       this.game.clients = this.lobby.state.clients;
       this.game.start();
     };
-    // TEST: this is temporal id meant for development
-    this.conn.send("lobby:connect:0");
+    this.conn.send(`lobby:connect:${lobbyID}`);
+  }
+
+  requstLobbies() {
+    if (this.lobbies == undefined) {
+      this.lobbies = new LobbyList(document.body);
+      this.lobbies.onJoin = this.connectToLobby.bind(this);
+    }
+    this.conn.send("lobby:list");
   }
 
   async askName() {
@@ -92,5 +105,6 @@ window.onload = async function () {
   const client = new Client();
   client.connect();
   await client.askName();
-  client.connectToLobby();
+  client.requstLobbies();
+  // client.connectToLobby();
 };
