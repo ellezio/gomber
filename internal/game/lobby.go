@@ -225,9 +225,8 @@ type Lobby struct {
 	name    string
 	clients map[int]*LobbyClient
 
-	// tmp game props
-	eventCh chan ClientEvent
-	state   atomic.Int32
+	gameCh chan<- GameMessage
+	state  atomic.Int32
 
 	ch      chan LobbyMessege
 	gameMap string
@@ -238,7 +237,6 @@ func NewLobby(name string) *Lobby {
 	return &Lobby{
 		name:    name,
 		clients: map[int]*LobbyClient{},
-		eventCh: make(chan ClientEvent),
 		ch:      make(chan LobbyMessege, messageQueueSize),
 		done:    make(chan struct{}),
 
@@ -288,6 +286,8 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 		l.setMap(msg.mapName)
 
 	case GameFinishedMessage:
+		close(l.gameCh)
+		l.gameCh = nil
 		l.broadcaseClientMessage(msg.gameResult)
 
 	case ClientInpuMessage:
@@ -365,8 +365,8 @@ func (l *Lobby) removeClient(clientID int) {
 		c.sendFn(ls)
 	}
 
-	if l.state.Load() == state_inGame {
-		l.eventCh <- ClientLeftEvent{Id: clientID}
+	if l.state.Load() == state_inGame && l.gameCh != nil {
+		l.gameCh <- ClientLeftEvent{Id: clientID}
 	}
 }
 
@@ -391,14 +391,11 @@ func (l *Lobby) runGame(clientId int) error {
 		return errors.New("only admin can start game")
 	}
 
-	for len(l.eventCh) > 0 {
-		<-l.eventCh
-	}
-
 	gameMap := l.gameMap
+	game := NewGame()
+	l.gameCh = game.GetMessageChannel()
 
 	go func() {
-		game := NewGame(l.eventCh)
 		l.state.Store(state_inGame)
 		gr := game.Run(gameMap)
 
@@ -411,7 +408,7 @@ func (l *Lobby) runGame(clientId int) error {
 	}()
 
 	for _, c := range l.clients {
-		l.eventCh <- ClientConnectedEvent{ClientId: c.clientID, Notifier: c, Name: c.name}
+		l.gameCh <- ClientConnectedEvent{ClientId: c.clientID, Notifier: c, Name: c.name}
 	}
 
 	return nil
@@ -433,8 +430,8 @@ func (l *Lobby) broadcaseClientMessage(msg ClientMessage) {
 }
 
 func (l *Lobby) handleClientInput(inp ClientInputEvent) {
-	if l.eventCh != nil && l.state.Load() == state_inGame {
-		l.eventCh <- inp
+	if l.gameCh != nil && l.state.Load() == state_inGame {
+		l.gameCh <- inp
 	}
 }
 

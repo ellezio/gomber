@@ -27,6 +27,15 @@ const (
 	Tile_DestructibleWall
 )
 
+type GameMessage interface {
+	iGameMessage()
+}
+
+func (ClientLeftEvent) iGameMessage()         {}
+func (ClientConnectedEvent) iGameMessage()    {}
+func (ClientInputEvent) iGameMessage()        {}
+func (ClientDisconnectedEvent) iGameMessage() {}
+
 // ClientGameState represents the state of the game
 // that is presented to each client, which may differ.
 // Each client receives state with information that are trimmed for them.
@@ -54,10 +63,6 @@ type GameClient struct {
 	processedInput *Input
 }
 
-// TODO:
-// think about something more self describing
-// type then just `any`
-type ClientEvent any
 type ClientConnectedEvent struct {
 	ClientId int
 	Name     string
@@ -94,29 +99,38 @@ type GameResult struct {
 	WinnerId int `json:"winnerId"`
 }
 
+const (
+	gameMessageQueueSize = 64
+)
+
 type Game struct {
 	GameState
 
 	playerSpawns []SpawnPoint
 
-	clients         map[int]*GameClient
-	clientsEventsCh <-chan ClientEvent
-	inputHandler    *InputHandler
-	lastId          int
-	toRemove        []*Entity
-	over            bool
+	clients      map[int]*GameClient
+	inputHandler *InputHandler
+	lastId       int
+	toRemove     []*Entity
+	over         bool
+
+	ch chan GameMessage
 }
 
-func NewGame(clientsEventsCh <-chan ClientEvent) *Game {
+func NewGame() *Game {
 	game := &Game{
-		clients:         make(map[int]*GameClient),
-		clientsEventsCh: clientsEventsCh,
+		clients: make(map[int]*GameClient),
+		ch:      make(chan GameMessage, gameMessageQueueSize),
 	}
 
 	inputHandler := NewInputHandler(game)
 
 	game.inputHandler = inputHandler
 	return game
+}
+
+func (g *Game) GetMessageChannel() chan<- GameMessage {
+	return g.ch
 }
 
 func (g *Game) Run(mapName string) GameResult {
@@ -126,8 +140,8 @@ func (g *Game) Run(mapName string) GameResult {
 	lastTs := time.Now()
 	for !g.over {
 		select {
-		case event := <-g.clientsEventsCh:
-			g.handleClientEvent(event)
+		case msg := <-g.ch:
+			g.handleGameMessage(msg)
 		case <-ticker.C:
 			nowTs := time.Now()
 			tempTs := lastTs
@@ -406,7 +420,7 @@ func (g *Game) playerVsCollectable(player *Player) {
 	}
 }
 
-func (g *Game) handleClientEvent(event ClientEvent) {
+func (g *Game) handleGameMessage(event GameMessage) {
 	switch details := event.(type) {
 	case ClientConnectedEvent:
 		g.addClient(details)

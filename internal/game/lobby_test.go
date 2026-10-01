@@ -166,16 +166,17 @@ func TestLobbyHandlerInput(t *testing.T) {
 
 func TestLobbyForwardsInputOnlyDuringGame(t *testing.T) {
 	lobby := NewLobby("test")
-	lobby.eventCh = make(chan ClientEvent, 1)
+	gameCh := make(chan GameMessage, 1)
+	lobby.gameCh = gameCh
 	input := ClientInputEvent{Id: 12, Input: Input{Id: 8, Actions: []action{Up}}}
 	lobby.handleClientInput(input)
-	if len(lobby.eventCh) != 0 {
+	if len(lobby.gameCh) != 0 {
 		t.Fatal("input before game was forwarded")
 	}
 	lobby.state.Store(state_inGame)
 	lobby.handleClientInput(input)
 	select {
-	case event := <-lobby.eventCh:
+	case event := <-gameCh:
 		_, ok := event.(ClientInputEvent)
 		if !ok {
 			t.Fatalf("event is not ClientInputEvent. got=%T", event)
