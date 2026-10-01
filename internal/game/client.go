@@ -304,16 +304,68 @@ func (c *ClientSession) measurePingLatency(pingID string) error {
 	return errors.New("requested pingID not exists")
 }
 
+type ClientRequstMessage struct {
+	raw []byte
+	off int
+}
+
+// Next return slice up to next separator or what left from current offset if non was found.
+//
+// Operation advances the offset.
+func (crm *ClientRequstMessage) Next() []byte {
+	if crm.off >= len(crm.raw) {
+		return nil
+	}
+
+	var result []byte
+	idx := bytes.IndexByte(crm.raw[crm.off:], ':')
+	if idx == -1 {
+		result = crm.raw[crm.off:]
+		crm.off = crm.off + len(crm.raw)
+	} else {
+		result = crm.raw[crm.off : crm.off+idx]
+		crm.off = crm.off + idx + 1 // jump over separator
+	}
+	return result
+}
+
+// Rest return every thing from current offset to the and of slice.
+//
+// Operation advances the offset.
+func (crm *ClientRequstMessage) Rest() []byte {
+	if crm.off >= len(crm.raw) {
+		return nil
+	}
+
+	result := crm.raw[crm.off:]
+	crm.off = crm.off + len(crm.raw)
+	return result
+}
+
 func (c *ClientSession) handleInput(ctx context.Context, p []byte) error {
+	crm := &ClientRequstMessage{raw: p}
+	scope := crm.Next()
 	switch {
-	case bytes.HasPrefix(p, []byte("lobby:connect")):
-		return c.handleLobbyConectMessage(ctx, p)
-	case bytes.HasPrefix(p, []byte("lobby:list")):
-		return c.handleGetLobbyList(ctx)
-	case bytes.Equal(p, []byte("game:start")):
+	case bytes.Equal(scope, []byte("lobby")):
+		return c.handleLobbyMessage(ctx, crm)
+	case bytes.Equal(scope, []byte("game")):
 		return c.handleGameStartMessage()
 	default:
 		return c.handleGameInputMessage(p)
+	}
+}
+
+func (c *ClientSession) handleLobbyMessage(ctx context.Context, crm *ClientRequstMessage) error {
+	command := crm.Next()
+	switch {
+	case bytes.Equal(command, []byte("connect")):
+		return c.handleLobbyConectMessage(ctx, crm)
+	case bytes.Equal(command, []byte("list")):
+		return c.handleGetLobbyList(ctx)
+	case bytes.Equal(command, []byte("create")):
+		return c.handleLobbyCreate(ctx, crm)
+	default:
+		return errors.New("invalid lobby command")
 	}
 }
 
@@ -323,7 +375,27 @@ func (c *ClientSession) handleGetLobbyList(ctx context.Context) error {
 	return nil
 }
 
-func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, p []byte) error {
+func (c *ClientSession) handleLobbyCreate(ctx context.Context, crm *ClientRequstMessage) error {
+	name := crm.Rest()
+	if name == nil {
+		return errors.New("name cannot be empty")
+	}
+
+	nameStr := string(name)
+
+	lobbyID := c.LobbyManager.Create(nameStr)
+	if err := c.joinToLobby(ctx, lobbyID); err != nil {
+		slog.Error("failed to enter newly created lobby", "clientID", c.info.Id, "lobbyName", nameStr, "error", err)
+		if err = c.LobbyManager.Close(lobbyID, c.info.Id); err != nil {
+			slog.Error("failed to close lobby", "clientID", c.info.Id, "lobbyName", nameStr, "error", err)
+		}
+		return errors.New("failed to enter newly created lobby")
+	}
+
+	return nil
+}
+
+func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, crm *ClientRequstMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -331,22 +403,32 @@ func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, p []byte) 
 		return errors.New("client is already connected to a lobby")
 	}
 
-	if len(p) < 15 || p[13] != ':' {
-		return errors.New("invalid lobby id")
+	rawLobbyID := crm.Rest()
+	if rawLobbyID == nil {
+		return errors.New("lobby id cannot be empty")
 	}
 
-	lobbyID, err := strconv.Atoi(string(p[14:]))
+	lobbyID, err := strconv.Atoi(string(rawLobbyID))
 	if err != nil {
 		return errors.New("invalid lobby id")
 	}
 
+	if err := c.joinToLobby(ctx, lobbyID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *ClientSession) joinToLobby(ctx context.Context, lobbyID int) error {
 	sendFn := c.createSendClientMessageFn(ctx)
 
-	c.lobbyHandler, err = c.LobbyManager.Join(lobbyID, c.info, sendFn)
+	handler, err := c.LobbyManager.Join(lobbyID, c.info, sendFn)
 	if err != nil {
 		return err
 	}
 
+	c.lobbyHandler = handler
 	return nil
 }
 

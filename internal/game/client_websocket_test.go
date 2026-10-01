@@ -69,7 +69,7 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 		msgType, details = readServerMessage(t, conn)
 		var state LobbyState
 		if err := json.Unmarshal(details, &state); err != nil {
-			t.Fatal(err)
+			t.Fatalf("failed to unmarshal LobbyState. raw=%q, err=%v", details, err)
 		}
 		if msgType != "lobbyState" || state.Name != "test" || len(state.Clients) != 1 || state.Clients[0].Name != "Jev" || state.Clients[0].Id != 1 {
 			t.Fatalf("lobby response = %s %+v", msgType, state)

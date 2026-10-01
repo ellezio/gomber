@@ -76,6 +76,17 @@ class Client {
     if (this.lobbies == undefined) {
       this.lobbies = new LobbyList(document.body);
       this.lobbies.onJoin = this.connectToLobby.bind(this);
+      this.lobbies.onCreate = (name: string) => {
+        this.lobby = new Lobby(document.body);
+        this.lobby.ongamestart = () => {
+          this.conn.send("game:start");
+          this.game = new Game();
+          this.game.conn = this.conn;
+          this.game.clients = this.lobby.state.clients;
+          this.game.start();
+        };
+        this.conn.send(`lobby:create:${name}`);
+      };
     }
     this.conn.send("lobby:list");
   }

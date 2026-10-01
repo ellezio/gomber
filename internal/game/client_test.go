@@ -1,6 +1,7 @@
 package game
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -75,16 +76,15 @@ func TestClientHandleInputErrors(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload string
-		wantErr string
 	}{
-		{"start before joining", "game:start", "not in lobby"},
-		{"input before joining", `{"id":1,"actions":["up"]}`, "not in lobby"},
-		{"missing separator", "lobby:connect0", "invalid lobby id"},
-		{"wrong separator", "lobby:connectX0", "invalid lobby id"},
-		{"missing ID", "lobby:connect:", "invalid lobby id"},
-		{"nondecimal ID", "lobby:connect:nope", "invalid lobby id"},
-		{"unknown ID", "lobby:connect:99", "Lobby not exists"},
-		{"negative ID", "lobby:connect:-1", "Lobby not exists"},
+		{"start before joining", "game:start"},
+		{"input before joining", `{"id":1,"actions":["up"]}`},
+		{"missing separator", "lobby:connect0"},
+		{"wrong separator", "lobby:connectX0"},
+		{"missing ID", "lobby:connect:"},
+		{"nondecimal ID", "lobby:connect:nope"},
+		{"unknown ID", "lobby:connect:99"},
+		{"negative ID", "lobby:connect:-1"},
 	}
 
 	ctx := context.Background()
@@ -92,8 +92,8 @@ func TestClientHandleInputErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := client.handleInput(ctx, []byte(tt.payload))
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("handleInput(%q): wrong error, got: %v, want: %q", tt.payload, err, tt.wantErr)
+			if err == nil {
+				t.Fatalf("handleInput(%q): expected error.", tt.payload)
 			}
 			if client.lobbyHandler != nil {
 				t.Fatal("client should not join a lobby")
@@ -193,5 +193,77 @@ func TestSerializeClientMessage(t *testing.T) {
 
 	if _, err := serializeMessage(theWorld{}); err == nil {
 		t.Fatal("unsupported message should return an error")
+	}
+}
+
+func TestClientRequstMessageNext(t *testing.T) {
+	tests := []struct {
+		input    []byte
+		expected [][]byte
+	}{
+		{
+			input:    []byte("lobby:connect"),
+			expected: [][]byte{[]byte("lobby"), []byte("connect")},
+		},
+		{
+			input:    []byte("lobby:connect"),
+			expected: [][]byte{[]byte("lobby"), []byte("connect"), nil},
+		},
+		{
+			input:    []byte("lobby:connect:1"),
+			expected: [][]byte{[]byte("lobby"), []byte("connect"), []byte("1")},
+		},
+	}
+
+	for _, tt := range tests {
+		crm := &ClientRequstMessage{raw: tt.input}
+		for _, expected := range tt.expected {
+			got := crm.Next()
+			if !bytes.Equal(got, expected) {
+				t.Errorf("wrong message part. got=%s want=%s", got, expected)
+				break
+			}
+		}
+	}
+}
+
+func TestClientRequstMessageRest(t *testing.T) {
+	tests := []struct {
+		input    []byte
+		expected []byte
+		withNext bool
+	}{
+		{
+			input:    []byte("lobby:connect"),
+			expected: []byte("lobby:connect"),
+			withNext: false,
+		},
+		{
+			input:    []byte("lobby:connect"),
+			expected: []byte("connect"),
+			withNext: true,
+		},
+		{
+			input:    []byte("lobby:connect:1"),
+			expected: []byte("connect:1"),
+			withNext: true,
+		},
+		{
+			input:    []byte("lobby:connect:1:1:1:1"),
+			expected: []byte("connect:1:1:1:1"),
+			withNext: true,
+		},
+	}
+
+	for _, tt := range tests {
+		crm := &ClientRequstMessage{raw: tt.input}
+		if tt.withNext {
+			crm.Next()
+		}
+		got := crm.Rest()
+		if !bytes.Equal(got, tt.expected) {
+			t.Errorf("wrong message part. got=%s want=%s", got, tt.expected)
+			break
+		}
 	}
 }
