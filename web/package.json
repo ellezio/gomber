@@ -1,13 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "scripts": {
-    "dev": "webpack build --config webpack.config.js --mode development --watch",
-    "collision": "webpack build --config collision-sample/collision-sample.webpack.config.js --mode development --watch"
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "collision": "vite build --mode collision --watch",
+    "build:collision": "vite build --mode collision",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.6.2",
     "typescript-language-server": "^4.3.3",
-    "webpack-cli": "^5.1.4",
-    "ts-loader": "^9.5.1"
+    "vite": "^6.3.6"
   }
 }
