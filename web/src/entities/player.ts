@@ -44,6 +44,10 @@ export class Player extends Entity {
     this.position.y = playerMsg.pos.y;
     this.size.width = playerMsg.aabb.max.x;
     this.size.height = playerMsg.aabb.max.y;
+    this.updateStatsFromMessage(playerMsg);
+  }
+
+  updateStatsFromMessage(playerMsg: playerInMsg) {
     this.speed = playerMsg.speed;
     this.maxBombs = playerMsg.maxBombs;
     this.availableBombs = playerMsg.availableBombs;

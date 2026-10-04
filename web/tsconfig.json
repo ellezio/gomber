@@ -1,16 +1,21 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES5",
+    "module": "esnext",
+    "target": "es2022",
+    "moduleResolution": "bundler",
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true,
     "sourceMap": true,
     "outDir": "./dist/",
+    "lib": [
+      "DOM",
+      "ES2022"
+    ]
   },
   "include": [
     "src/**/*",
     "collision-sample/index.ts"
-  ],
+  ]
 }

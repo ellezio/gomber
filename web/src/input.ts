@@ -2,11 +2,8 @@ import { Player } from "./entities/player";
 
 export type input = { actions: Action[]; dt: number };
 export type unprocessedInput = {
-  inputId: number;
+  seq: number;
   input: input;
-  x: number;
-  y: number;
-  speed: number;
 };
 
 export enum Action {
@@ -24,18 +21,25 @@ export class InputHandler {
   pressedKey: pressedKeys = {};
 
   handleKeyboardEvent = (evt: KeyboardEvent) => {
-    // evt.preventDefault();
+    if (evt.key == " ") {
+      evt.preventDefault();
+    }
+
     this.pressedKey[evt.key.toLowerCase()] = evt.type == "keydown";
   };
 
-  getAction = (): Action[] => {
+  currentInput = (dt: number): input | null => {
     const actions: Action[] = [];
     if (this.pressedKey.w) actions.push(Action.Up);
     if (this.pressedKey.d) actions.push(Action.Right);
     if (this.pressedKey.s) actions.push(Action.Down);
     if (this.pressedKey.a) actions.push(Action.Left);
     if (this.pressedKey[" "]) actions.push(Action.DropBomb);
-    return actions;
+
+    if (actions.length) {
+      return { actions, dt };
+    }
+    return null;
   };
 
   handleInput(input: input): command | null {

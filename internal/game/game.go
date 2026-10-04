@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	updatesRate int = 40
+	updatesRate int = 61
 
 	TileSize = 50
 )
@@ -110,7 +110,7 @@ type Game struct {
 
 	clients      map[int]*GameClient
 	inputHandler *InputHandler
-	lastId       int
+	nextEntityID int
 	toRemove     []*Entity
 	over         bool
 
@@ -178,17 +178,15 @@ func (g *Game) Run(mapName string) GameResult {
 func (g *Game) handleInput(dt float32) {
 	for _, client := range g.clients {
 		input := client.inputs.Pop()
-		if input == nil {
-			continue
-		}
-
-		if commands := g.inputHandler.HandleInput(input); commands != nil {
-			for _, command := range commands {
-				command(client.controlledEntity, dt)
+		for ; input != nil; input = client.inputs.Pop() {
+			if commands := g.inputHandler.HandleInput(input); commands != nil {
+				for _, command := range commands {
+					command(client.controlledEntity, dt)
+				}
 			}
-		}
 
-		client.processedInput = input
+			client.processedInput = input
+		}
 	}
 }
 
@@ -494,23 +492,23 @@ func (g *Game) removeClient(id int) {
 func (g *Game) Instantiate(entity any) bool {
 	switch e := entity.(type) {
 	case *Player:
-		e.Id = g.generateId()
+		e.Id = g.generateEntityId()
 		e.game = g
 		g.Players = append(g.Players, e)
 	case *Bomb:
 		if g.bombGrid[int(e.Pos.Y/TileSize)][int(e.Pos.X/TileSize)] > 0 {
 			return false
 		}
-		e.Id = g.generateId()
+		e.Id = g.generateEntityId()
 		e.game = g
 		g.bombGrid[int(e.Pos.Y/TileSize)][int(e.Pos.X/TileSize)] = e.Id
 		g.Bombs = append(g.Bombs, e)
 	case *Explosion:
-		e.Id = g.generateId()
+		e.Id = g.generateEntityId()
 		e.game = g
 		g.Explosions = append(g.Explosions, e)
 	case *PowerUp:
-		e.Id = g.generateId()
+		e.Id = g.generateEntityId()
 		e.game = g
 		g.PowerUps = append(g.PowerUps, e)
 
@@ -541,9 +539,9 @@ func (g *Game) removeEntities() {
 	}
 }
 
-func (g *Game) generateId() int {
-	id := g.lastId
-	g.lastId++
+func (g *Game) generateEntityId() int {
+	id := g.nextEntityID
+	g.nextEntityID++
 	return id
 }
 

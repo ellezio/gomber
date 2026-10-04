@@ -1,4 +1,5 @@
 import { Board, TileType } from "./board";
+import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
 import { Player } from "./entities/player";
@@ -59,10 +60,11 @@ export class Game {
   dtSum = 0;
   explosionDtSum = 0;
 
-  unprocessedInputs: unprocessedInput[] = [];
   conn: WebSocket;
-  updateRate = 30;
+  updateRate = 60;
   lastTs: number;
+
+  inputBuffer = new CircularBuffer<unprocessedInput>(60);
 
   updateInterval: number;
 
@@ -99,11 +101,28 @@ export class Game {
           this.playerInfo.player = this.board.player;
         }
 
-        // if (data.processedInput === null) continue;
+        if (data.processedInput === null) {
+          this.board.player.updateStatsFromMessage(player);
+          continue;
+        }
 
-        const processingInput = this.unprocessedInputs.shift();
         this.board.player.updateFromMessage(player);
-        // if (processingInput !== undefined) {
+        let processingInput = this.inputBuffer.pop();
+
+        while (
+          processingInput &&
+          processingInput.seq != data.processedInput.id
+        ) {
+          processingInput = this.inputBuffer.pop();
+        }
+
+        for (const input of this.inputBuffer) {
+          if (!input) break;
+          const command = this.inputHandler.handleInput(input.input);
+          command && command(this.board.player);
+        }
+
+        // if (processingInput) {
         //   if (processingInput.inputId !== data.processedInput.id) {
         //     this.unprocessedInputs.length = 0;
         //     this.board.player.position.x = player.pos.x;
@@ -199,7 +218,7 @@ export class Game {
   private update() {
     this.clear();
 
-    const nowTs = +new Date();
+    const nowTs = performance.now();
     const lastTs = this.lastTs || nowTs;
     const dt = (nowTs - lastTs) / 1000;
     this.lastTs = nowTs;
@@ -215,9 +234,9 @@ export class Game {
 
     let input: { actions: Action[]; dt: number } | null = null;
     if (this.board.player.active) {
-      const actions = this.inputHandler.getAction();
-      input = actions.length > 0 ? { actions, dt } : null;
+      input = this.inputHandler.currentInput(dt);
     }
+
     this.board.update(this.ctx, input);
     this.playerInfo.update(this.ctx);
     this.playerList.update(this.ctx);
@@ -229,21 +248,18 @@ export class Game {
     }
 
     if (input != null) {
-      const last_uinp =
-        this.unprocessedInputs[this.unprocessedInputs.length - 1];
-      const uinp: unprocessedInput = {
-        inputId: (last_uinp?.inputId ?? 0) + 1,
-        x: this.board.player.position.x,
-        y: this.board.player.position.y,
-        speed: this.board.player.speed,
+      const lastInput = this.inputBuffer.peekRear();
+      const uinput: unprocessedInput = {
+        seq: (lastInput?.seq ?? 0) + 1,
         input,
       };
-      this.unprocessedInputs.push(uinp);
+      this.inputBuffer.push(uinput);
+
       this.conn.send(
         JSON.stringify({
-          id: uinp.inputId,
-          actions: uinp.input.actions,
-          dt: uinp.input.dt,
+          id: uinput.seq,
+          actions: uinput.input.actions,
+          dt: uinput.input.dt,
         }),
       );
     }
