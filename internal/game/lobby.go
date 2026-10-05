@@ -82,10 +82,6 @@ type LobbyManager struct {
 
 func NewLobbyManager() *LobbyManager {
 	lm := &LobbyManager{lobbies: make(map[int]*LobbyInfo)}
-	// lm.Create("lobby name1")
-	// lm.Create("lobby name2")
-	// lm.Create("lobby name3")
-	// lm.Create("lobby name4")
 	return lm
 }
 

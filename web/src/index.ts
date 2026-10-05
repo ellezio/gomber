@@ -15,6 +15,7 @@ class Client {
   lobby: Lobby;
   lobbies: LobbyList;
   askNameResolve: (v: unknown) => void;
+  lobbyListInterval: number;
 
   connect() {
     this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
@@ -61,6 +62,7 @@ class Client {
   }
 
   connectToLobby(lobbyID: number) {
+    this.stopLobbyListInterval();
     this.lobby = new Lobby(document.body);
     this.lobby.ongamestart = () => {
       this.conn.send("game:start");
@@ -77,6 +79,7 @@ class Client {
       this.lobbies = new LobbyList(document.body);
       this.lobbies.onJoin = this.connectToLobby.bind(this);
       this.lobbies.onCreate = (name: string) => {
+        this.stopLobbyListInterval();
         this.lobby = new Lobby(document.body);
         this.lobby.ongamestart = () => {
           this.conn.send("game:start");
@@ -88,7 +91,20 @@ class Client {
         this.conn.send(`lobby:create:${name}`);
       };
     }
+    this.startLobbyListInterval();
+  }
+
+  startLobbyListInterval() {
+    this.stopLobbyListInterval();
     this.conn.send("lobby:list");
+    this.lobbyListInterval = window.setInterval(
+      () => this.conn.send("lobby:list"),
+      10000,
+    );
+  }
+
+  stopLobbyListInterval() {
+    window.clearInterval(this.lobbyListInterval);
   }
 
   async askName() {
