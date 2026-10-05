@@ -56,8 +56,13 @@ export class Player extends Entity {
     this.name = playerMsg.name;
   }
 
-  update(ctx: CanvasRenderingContext2D, offset: number, scale: number): void {
-    super.update(ctx, offset, scale);
+  update(
+    ctx: CanvasRenderingContext2D,
+    offset: number,
+    scale: number,
+    dt: number,
+  ): void {
+    super.update(ctx, offset, scale, dt);
 
     if (!this.active) return;
 

@@ -2,6 +2,7 @@ import { Board, TileType } from "./board";
 import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
+import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { Action, InputHandler, unprocessedInput } from "./input";
 import { clients, lobbyState } from "./lobby";
@@ -178,7 +179,7 @@ export class Game {
 
     data.board.explosions?.forEach((e) => {
       this.board.explosions.push(
-        new Entity(
+        new Explosion(
           e.id,
           e.pos,
           { width: e.aabb.max.x, height: e.aabb.max.y },
@@ -237,15 +238,9 @@ export class Game {
       input = this.inputHandler.currentInput(dt);
     }
 
-    this.board.update(this.ctx, input);
+    this.board.update(this.ctx, input, dt);
     this.playerInfo.update(this.ctx);
     this.playerList.update(this.ctx);
-
-    this.explosionDtSum += dt;
-    if (this.explosionDtSum >= 0.3) {
-      this.explosionDtSum = 0;
-      this.board.explosions = [];
-    }
 
     if (input != null) {
       const lastInput = this.inputBuffer.peekRear();

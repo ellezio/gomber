@@ -1,5 +1,6 @@
 import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
+import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { input, InputHandler } from "./input";
 
@@ -13,7 +14,7 @@ export class Board {
   player: Player;
   entities: Entity[] = [];
   bombs: Bomb[] = [];
-  explosions: Entity[] = [];
+  explosions: Explosion[] = [];
   powerups: Entity[] = [];
 
   constructor(
@@ -35,7 +36,11 @@ export class Board {
     this.grid = grid;
   }
 
-  update(ctx: CanvasRenderingContext2D, input: input | null = null) {
+  update(
+    ctx: CanvasRenderingContext2D,
+    input: input | null = null,
+    dt: number,
+  ) {
     // if (this.player !== undefined && input !== null) {
     //   const command = this.inputHandler.handleInput(input);
     //   command && command(this.player);
@@ -64,12 +69,14 @@ export class Board {
       //   entity.color = "blue";
       // }
 
-      entity.update(ctx, this.offset, SCALE);
+      entity.update(ctx, this.offset, SCALE, dt);
     }
 
     this.bombs.forEach((b) => b.update(ctx, this.offset, SCALE));
-    this.explosions.forEach((e) => e.update(ctx, this.offset, SCALE));
-    this.powerups.forEach((e) => e.update(ctx, this.offset, SCALE));
-    this.player?.update(ctx, this.offset, SCALE);
+    this.explosions.forEach((e) => e.update(ctx, this.offset, SCALE, dt));
+    this.powerups.forEach((e) => e.update(ctx, this.offset, SCALE, dt));
+    this.player?.update(ctx, this.offset, SCALE, dt);
+
+    this.explosions = this.explosions.filter((ent) => ent.active);
   }
 }
