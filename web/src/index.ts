@@ -1,13 +1,20 @@
 import { boardUpdateMessage, Game } from "./game";
+import { Action } from "./input";
 import { Lobby, lobbyState } from "./lobby";
 import { LobbyItem, LobbyList } from "./lobbyList";
 
 type ServerMessage =
-  | boardUpdateMessage
+  | { type: "snapshot"; details: boardUpdateMessage }
   | { type: "lobbyState"; details: lobbyState }
   | { type: "lobbyList"; details: LobbyItem[] }
   | { type: "gameResult"; details: { winnerId: number } }
   | { type: "ok"; details: "name" };
+
+type networkInput = {
+  id: number;
+  actions: Action[];
+  dt: number;
+};
 
 class Client {
   conn: WebSocket;
@@ -22,56 +29,105 @@ class Client {
     this.conn.onmessage = this.handleMessage.bind(this);
   }
 
-  handleMessage(evt: MessageEvent<any>) {
-    const data: ServerMessage = JSON.parse(evt.data);
+  sendGameStart() {
+    this.conn.send("game:start");
+  }
 
-    if ("type" in data) {
-      switch (data.type) {
-        case "lobbyState":
-          this.lobby?.handleMessage(data.details, !this.game);
-          if (this.game != null) {
-            this.game.clients = data.details.clients;
-          }
-          break;
-        case "lobbyList":
-          this.lobbies?.handleMessage(data.details);
-          break;
-        case "gameResult":
-          const client = this.lobby.state.clients.find(
-            (c) => c.id == data.details.winnerId,
-          );
-          this.game.renderResult(client?.name);
-          setTimeout(() => {
-            this.game = null;
-            this.lobby.render();
-          }, 2000);
-          break;
-        case "ok":
-          this.askNameResolve?.(null);
-          break;
-      }
-    } else if ("board" in data) {
-      if (this.game == null) {
-        this.game = new Game();
-        this.game.conn = this.conn;
-        this.game.clients = this.lobby.state.clients;
-        this.game.start();
-      }
-      this.game.handleMessage(data);
+  sendLobbyCreate(name: string) {
+    this.conn.send(`lobby:create:${name}`);
+  }
+
+  sendLobbyConnect(id: number) {
+    this.conn.send(`lobby:connect:${id}`);
+  }
+
+  sendLobbyList() {
+    this.conn.send("lobby:list");
+  }
+
+  sendClientName(name: string) {
+    this.conn.send(`name:${name}`);
+  }
+
+  sendClientInput(netInput: networkInput) {
+    this.conn.send(JSON.stringify(netInput));
+  }
+
+  handleMessage(evt: MessageEvent<any>) {
+    const msg: ServerMessage = JSON.parse(evt.data);
+
+    switch (msg.type) {
+      case "lobbyState":
+        this.handleLobbyState(msg.details);
+        break;
+      case "lobbyList":
+        this.handleLobbyList(msg.details);
+        break;
+      case "gameResult":
+        this.handleGameResult(msg.details.winnerId);
+        break;
+      case "ok":
+        this.handleNameAck();
+        break;
+      case "snapshot":
+        this.handleGameSnapshot(msg.details);
     }
+  }
+
+  handleLobbyState(state: lobbyState) {
+    this.lobby?.handleMessage(state, !this.game);
+    if (this.game != null) {
+      this.game.clients = state.clients;
+    }
+  }
+
+  handleLobbyList(lobbies: LobbyItem[]) {
+    this.lobbies?.handleMessage(lobbies);
+  }
+
+  handleGameResult(winnerID: number) {
+    const client = this.lobby.state.clients.find((c) => c.id == winnerID);
+    this.game.renderResult(client?.name);
+    setTimeout(() => {
+      this.game = null;
+      this.lobby.render();
+    }, 2000);
+  }
+
+  handleNameAck() {
+    this.askNameResolve?.(null);
+  }
+
+  handleGameSnapshot(snapshot: boardUpdateMessage) {
+    if (this.game == null) {
+      this.startGame();
+    }
+    this.game.handleMessage(snapshot);
+  }
+
+  createLobby(): Lobby {
+    const lobby = new Lobby(document.body);
+    lobby.ongamestart = this.startGame.bind(this);
+    return lobby;
+  }
+
+  createGame(): Game {
+    const game = new Game();
+    game.clients = this.lobby.state.clients;
+    game.onInput = (inp) => {
+      this.sendClientInput({
+        id: inp.seq,
+        actions: inp.input.actions,
+        dt: inp.input.dt,
+      });
+    };
+    return game;
   }
 
   connectToLobby(lobbyID: number) {
     this.stopLobbyListInterval();
-    this.lobby = new Lobby(document.body);
-    this.lobby.ongamestart = () => {
-      this.conn.send("game:start");
-      this.game = new Game();
-      this.game.conn = this.conn;
-      this.game.clients = this.lobby.state.clients;
-      this.game.start();
-    };
-    this.conn.send(`lobby:connect:${lobbyID}`);
+    this.lobby = this.createLobby();
+    this.sendLobbyConnect(lobbyID);
   }
 
   requstLobbies() {
@@ -80,25 +136,24 @@ class Client {
       this.lobbies.onJoin = this.connectToLobby.bind(this);
       this.lobbies.onCreate = (name: string) => {
         this.stopLobbyListInterval();
-        this.lobby = new Lobby(document.body);
-        this.lobby.ongamestart = () => {
-          this.conn.send("game:start");
-          this.game = new Game();
-          this.game.conn = this.conn;
-          this.game.clients = this.lobby.state.clients;
-          this.game.start();
-        };
-        this.conn.send(`lobby:create:${name}`);
+        this.lobby = this.createLobby();
+        this.sendLobbyCreate(name);
       };
     }
     this.startLobbyListInterval();
   }
 
+  startGame() {
+    this.game = this.createGame();
+    this.sendGameStart();
+    this.game.start();
+  }
+
   startLobbyListInterval() {
     this.stopLobbyListInterval();
-    this.conn.send("lobby:list");
+    this.sendLobbyList();
     this.lobbyListInterval = window.setInterval(
-      () => this.conn.send("lobby:list"),
+      this.sendLobbyList.bind(this),
       10000,
     );
   }
@@ -116,7 +171,7 @@ class Client {
       btn.onclick = () => {
         const v = inp.value;
         this.askNameResolve = res;
-        this.conn.send(`name:${v}`);
+        this.sendClientName(v);
       };
       ask.appendChild(inp);
       ask.appendChild(btn);
@@ -126,12 +181,8 @@ class Client {
 }
 
 window.onload = async function () {
-  // const game = new Game();
-  // game.start();
-
   const client = new Client();
   client.connect();
   await client.askName();
   client.requstLobbies();
-  // client.connectToLobby();
 };

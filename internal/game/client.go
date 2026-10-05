@@ -554,9 +554,11 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 			Details: m,
 		}
 
-	// TODO: This is some old workaround - to handle when refactoring Game logic.
 	case ClientGameState:
-		return json.Marshal(m)
+		msg = Message{
+			Type:    "snapshot",
+			Details: m,
+		}
 
 	default:
 		return nil, fmt.Errorf("unsupported client message %T", clientMsg)

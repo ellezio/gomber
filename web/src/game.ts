@@ -5,7 +5,7 @@ import { Entity } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { Action, InputHandler, unprocessedInput } from "./input";
-import { clients, lobbyState } from "./lobby";
+import { clients } from "./lobby";
 import { PlayerInfo } from "./playerInfo";
 import { PlayerList } from "./playersList";
 
@@ -42,13 +42,6 @@ export type boardUpdateMessage = {
   };
 };
 
-type ServerMessage =
-  | boardUpdateMessage
-  | {
-      type: "lobbyState";
-      details: lobbyState;
-    };
-
 export class Game {
   playerList: PlayerList;
   playerInfo: PlayerInfo;
@@ -61,7 +54,6 @@ export class Game {
   dtSum = 0;
   explosionDtSum = 0;
 
-  conn: WebSocket;
   updateRate = 60;
   lastTs: number;
 
@@ -71,6 +63,8 @@ export class Game {
 
   canvas = document.createElement("canvas");
   ctx = this.canvas.getContext("2d");
+
+  onInput: (input: unprocessedInput) => void;
 
   async start() {
     this.canvas.width = 1000;
@@ -82,9 +76,6 @@ export class Game {
     this.playerInfo = new PlayerInfo(650, 1);
 
     this.populateDOM();
-
-    // this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
-    // this.conn.onmessage = this.handleMessage.bind(this);
 
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
@@ -250,13 +241,7 @@ export class Game {
       };
       this.inputBuffer.push(uinput);
 
-      this.conn.send(
-        JSON.stringify({
-          id: uinput.seq,
-          actions: uinput.input.actions,
-          dt: uinput.input.dt,
-        }),
-      );
+      this.onInput(uinput);
     }
   }
 
