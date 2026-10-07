@@ -57,6 +57,10 @@ class Client {
     this.conn.send(JSON.stringify(netInput));
   }
 
+  sendSetMap(name: string) {
+    this.conn.send(`lobby:setMap:${name}`);
+  }
+
   handleMessage(evt: MessageEvent<any>) {
     const msg: ServerMessage = JSON.parse(evt.data);
 
@@ -108,7 +112,7 @@ class Client {
 
   handleGameSnapshot(snapshot: boardUpdateMessage) {
     if (this.game == null) {
-      this.startGame();
+      this.startGame(false);
     }
     this.game.handleMessage(snapshot);
   }
@@ -127,7 +131,8 @@ class Client {
 
   createLobby(): Lobby {
     const lobby = new Lobby(mainElement);
-    lobby.ongamestart = this.startGame.bind(this);
+    lobby.onGameStart = () => this.startGame(true);
+    lobby.onMapSelect = this.sendSetMap.bind(this);
     return lobby;
   }
 
@@ -164,9 +169,9 @@ class Client {
     this.startLobbyListInterval();
   }
 
-  startGame() {
+  startGame(sendMessage: boolean) {
     this.game = this.createGame();
-    this.sendGameStart();
+    if (sendMessage) this.sendGameStart();
     this.game.start();
   }
 

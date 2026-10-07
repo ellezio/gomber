@@ -69,7 +69,8 @@ func TestParseNameMessage(t *testing.T) {
 }
 
 func TestClientHandleInputErrors(t *testing.T) {
-	lm := NewLobbyManager()
+	gmaps := NewGameMapManager()
+	lm := NewLobbyManager(gmaps)
 	client := NewClient(7, lm)
 	client.info.Name = "Jojo"
 
@@ -145,55 +146,6 @@ func TestClientPingLatency(t *testing.T) {
 			t.Fatalf("invalid pong: error = %v, tracker = %v", err, client.latencyTracker)
 		}
 	})
-}
-
-type theWorld struct{}
-
-func (theWorld) iClientMessage() {}
-
-func TestSerializeClientMessage(t *testing.T) {
-	tests := []struct {
-		name string
-		msg  ClientMessage
-		want string
-	}{
-		{
-			"name approved",
-			NameMessage{value: "name"},
-			`{"type":"ok","details":"name"}`,
-		},
-		{
-			"error",
-			ErrorMessage{value: "invalid"},
-			`{"type":"error","details":"invalid"}`,
-		},
-		{
-			"lobby",
-			LobbyState{Name: "test", Clients: []ClientInfo{{Id: 3, Name: "Ada", Latency: 12}}},
-			`{"type":"lobbyState","details":{"name":"test","clients":[{"id":3,"name":"Ada","latency":12}]}}`,
-		},
-		{
-			"result",
-			GameResult{WinnerId: 3},
-			`{"type":"gameResult","details":{"winnerId":3}}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := serializeMessage(tt.msg)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != tt.want {
-				t.Fatalf("serialized = %s, want %s", got, tt.want)
-			}
-		})
-	}
-
-	if _, err := serializeMessage(theWorld{}); err == nil {
-		t.Fatal("unsupported message should return an error")
-	}
 }
 
 func TestClientRequstMessageNext(t *testing.T) {

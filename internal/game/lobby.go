@@ -42,6 +42,7 @@ type RunGameMessage struct {
 type SetMapMessage struct {
 	clientID int
 	mapName  string
+	response chan<- LobbyResponse
 }
 
 type GameFinishedMessage struct {
@@ -78,15 +79,20 @@ type LobbyManager struct {
 	mu      sync.RWMutex
 	lobbies map[int]*LobbyInfo
 	nextID  int
+
+	gameMaps *GameMapManager
 }
 
-func NewLobbyManager() *LobbyManager {
-	lm := &LobbyManager{lobbies: make(map[int]*LobbyInfo)}
+func NewLobbyManager(gameMaps *GameMapManager) *LobbyManager {
+	lm := &LobbyManager{
+		lobbies:  make(map[int]*LobbyInfo),
+		gameMaps: gameMaps,
+	}
 	return lm
 }
 
 func (lm *LobbyManager) Create(name string) int {
-	lobby := NewLobby(name)
+	lobby := NewLobby(name, lm.gameMaps)
 	lobbyInfo := &LobbyInfo{Name: name, lobby: lobby}
 
 	lm.mu.Lock()
@@ -203,8 +209,10 @@ func (lc *LobbyClient) OnNewGameState(state ClientGameState) {
 }
 
 type LobbyState struct {
-	Name    string       `json:"name"`
-	Clients []ClientInfo `json:"clients"`
+	Name       string       `json:"name"`
+	Clients    []ClientInfo `json:"clients"`
+	GameMaps   []string     `json:"gameMaps"`
+	CurrentMap string       `json:"currentMap"`
 }
 
 const (
@@ -221,24 +229,30 @@ type Lobby struct {
 	name    string
 	clients map[int]*LobbyClient
 
-	gameCh chan<- GameMessage
-	state  atomic.Int32
+	gameMaps    *GameMapManager
+	gameMapName string
+	gameCh      chan<- GameMessage
+	state       atomic.Int32
 
-	ch      chan LobbyMessege
-	gameMap string
-	done    chan struct{}
+	ch   chan LobbyMessege
+	done chan struct{}
 }
 
-func NewLobby(name string) *Lobby {
-	return &Lobby{
-		name:    name,
-		clients: map[int]*LobbyClient{},
-		ch:      make(chan LobbyMessege, messageQueueSize),
-		done:    make(chan struct{}),
-
-		// TODO: remove when added map picker
-		gameMap: "board1",
+func NewLobby(name string, gameMaps *GameMapManager) *Lobby {
+	lobby := &Lobby{
+		name:     name,
+		clients:  map[int]*LobbyClient{},
+		ch:       make(chan LobbyMessege, messageQueueSize),
+		done:     make(chan struct{}),
+		gameMaps: gameMaps,
 	}
+
+	names := gameMaps.GetMapsName()
+	if len(names) > 0 {
+		lobby.gameMapName = names[0]
+	}
+
+	return lobby
 }
 
 func (l *Lobby) Start() {
@@ -279,7 +293,8 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 		msg.response <- LobbyResponse{err: err}
 
 	case SetMapMessage:
-		l.setMap(msg.mapName)
+		err := l.setMap(msg.clientID, msg.mapName)
+		msg.response <- LobbyResponse{err: err}
 
 	case GameFinishedMessage:
 		close(l.gameCh)
@@ -366,8 +381,19 @@ func (l *Lobby) removeClient(clientID int) {
 	}
 }
 
-func (l *Lobby) setMap(mapName string) {
-	l.gameMap = mapName
+func (l *Lobby) setMap(clientID int, mapName string) error {
+	client, ok := l.clients[clientID]
+	if !ok {
+		return errors.New("not in lobby")
+	}
+
+	if !client.Admin {
+		return errors.New("only admin can set game map")
+	}
+
+	l.gameMapName = mapName
+
+	return nil
 }
 
 func (l *Lobby) runGame(clientId int) error {
@@ -387,7 +413,10 @@ func (l *Lobby) runGame(clientId int) error {
 		return errors.New("only admin can start game")
 	}
 
-	gameMap := l.gameMap
+	gameMap, ok := l.gameMaps.Get(l.gameMapName)
+	if !ok {
+		return errors.New("game map does not exist")
+	}
 	game := NewGame()
 	l.gameCh = game.GetMessageChannel()
 
@@ -415,6 +444,9 @@ func (l *Lobby) State() LobbyState {
 	for _, c := range l.clients {
 		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency})
 	}
+
+	ls.GameMaps = l.gameMaps.GetMapsName()
+	ls.CurrentMap = l.gameMapName
 
 	return ls
 }
@@ -467,6 +499,17 @@ func (lh *LobbyHandler) RunGame() error {
 	responseCh := make(chan LobbyResponse, 1)
 	lh.lobbyCh <- RunGameMessage{
 		clientID: lh.clientID,
+		response: responseCh,
+	}
+	response := <-responseCh
+	return response.err
+}
+
+func (lh *LobbyHandler) SetMap(mapName string) error {
+	responseCh := make(chan LobbyResponse, 1)
+	lh.lobbyCh <- SetMapMessage{
+		clientID: lh.clientID,
+		mapName:  mapName,
 		response: responseCh,
 	}
 	response := <-responseCh

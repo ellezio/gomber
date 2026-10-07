@@ -25,7 +25,8 @@ func receiveLobbyState(t *testing.T, updates <-chan ClientMessage) LobbyState {
 
 func TestLobbyLifetime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		lm := NewLobbyManager()
+		gmaps := NewGameMapManager()
+		lm := NewLobbyManager(gmaps)
 		lobbyID := lm.Create("hybydyż")
 		firstUpdates := make(chan ClientMessage, 8)
 		secondUpdates := make(chan ClientMessage, 8)
@@ -98,7 +99,8 @@ func TestLobbyLifetime(t *testing.T) {
 }
 
 func TestLobbyAdminTransferAndStartRejections(t *testing.T) {
-	lobby := NewLobby("test")
+	gmaps := NewGameMapManager()
+	lobby := NewLobby("test", gmaps)
 	join := func(id int) {
 		t.Helper()
 		msg := ConnectClientMessage{info: ClientInfo{Id: id}, sendFn: func(ClientMessage) {}}
@@ -165,7 +167,8 @@ func TestLobbyHandlerInput(t *testing.T) {
 }
 
 func TestLobbyForwardsInputOnlyDuringGame(t *testing.T) {
-	lobby := NewLobby("test")
+	gmaps := NewGameMapManager()
+	lobby := NewLobby("test", gmaps)
 	gameCh := make(chan GameMessage, 1)
 	lobby.gameCh = gameCh
 	input := ClientInputEvent{Id: 12, Input: Input{Id: 8, Actions: []action{Up}}}
@@ -190,7 +193,8 @@ func TestGetLobbyList(t *testing.T) {
 	names := []string{"a", "few", "lobbies", "created"}
 	ids := make([]int, len(names))
 
-	lm := NewLobbyManager()
+	gmaps := NewGameMapManager()
+	lm := NewLobbyManager(gmaps)
 	for i, name := range names {
 		ids[i] = lm.Create(name)
 	}

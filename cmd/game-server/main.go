@@ -13,6 +13,11 @@ func main() {
 	flag.Parse()
 
 	gameServer := game.NewServer()
+	err := gameServer.LoadMaps()
+	if err != nil {
+		panic(err)
+	}
+
 	setupRoutes(gameServer)
 
 	fmt.Printf("Listening on :%s\n", *port)

@@ -1,10 +1,8 @@
 package game
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
-	"os"
 	"slices"
 	"time"
 
@@ -133,8 +131,8 @@ func (g *Game) GetMessageChannel() chan<- GameMessage {
 	return g.ch
 }
 
-func (g *Game) Run(mapName string) GameResult {
-	g.LoadMap(mapName)
+func (g *Game) Run(gameMap *GameMap) GameResult {
+	g.LoadMap(gameMap)
 
 	ticker := time.NewTicker(time.Second / time.Duration(updatesRate))
 	lastTs := time.Now()
@@ -545,28 +543,17 @@ func (g *Game) generateEntityId() int {
 	return id
 }
 
-func (g *Game) LoadMap(mapName string) {
-	var data struct {
-		Grid         [][]TileType    `json:"grid"`
-		PlayerSpawns []math2.Vector2 `json:"playerSpawns"`
-	}
+func (g *Game) LoadMap(gameMap *GameMap) {
+	g.BoardGrid = gameMap.Grid
 
-	boardRaw, _ := os.ReadFile("boards/" + mapName + ".json")
-
-	err := json.Unmarshal(boardRaw, &data)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	g.BoardGrid = data.Grid
-
-	g.bombGrid = make([][]int, len(g.BoardGrid))
 	l := len(g.BoardGrid[0])
-	for i := range len(g.bombGrid) {
-		g.bombGrid[i] = make([]int, l)
+	bombSlice := make([]int, len(g.BoardGrid)*l)
+	g.bombGrid = make([][]int, len(g.BoardGrid))
+	for i := range g.bombGrid {
+		g.bombGrid[i] = bombSlice[i*l : i*l+l]
 	}
 
-	for _, spawn := range data.PlayerSpawns {
+	for _, spawn := range gameMap.PlayerSpawns {
 		spawnPoint := SpawnPoint{spawn, nil}
 		g.playerSpawns = append(g.playerSpawns, spawnPoint)
 	}
