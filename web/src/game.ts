@@ -43,6 +43,8 @@ export type boardUpdateMessage = {
 };
 
 export class Game {
+  htmlElement: HTMLElement;
+
   playerList: PlayerList;
   playerInfo: PlayerInfo;
   board: Board;
@@ -203,8 +205,8 @@ export class Game {
     wrapper.style.width = "fit-content";
     wrapper.style.margin = "auto";
     wrapper.appendChild(this.canvas);
-    document.body.replaceChildren(wrapper);
-    document.body.appendChild(this.fps);
+    this.htmlElement.replaceChildren(wrapper);
+    this.htmlElement.appendChild(this.fps);
   }
 
   private update() {

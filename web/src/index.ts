@@ -3,12 +3,16 @@ import { Action } from "./input";
 import { Lobby, lobbyState } from "./lobby";
 import { LobbyItem, LobbyList } from "./lobbyList";
 
+const mainElement = document.getElementById("main");
+const snackbarElement = document.getElementById("snackbar-block");
+
 type ServerMessage =
   | { type: "snapshot"; details: boardUpdateMessage }
   | { type: "lobbyState"; details: lobbyState }
   | { type: "lobbyList"; details: LobbyItem[] }
   | { type: "gameResult"; details: { winnerId: number } }
-  | { type: "ok"; details: "name" };
+  | { type: "ok"; details: "name" }
+  | { type: "error"; details: string };
 
 type networkInput = {
   id: number;
@@ -71,6 +75,10 @@ class Client {
         break;
       case "snapshot":
         this.handleGameSnapshot(msg.details);
+        break;
+      case "error":
+        this.handleErrorMessage(msg.details);
+        break;
     }
   }
 
@@ -105,8 +113,20 @@ class Client {
     this.game.handleMessage(snapshot);
   }
 
+  handleErrorMessage(message: string) {
+    const msg = document.createElement("div");
+    msg.classList.add("error-message");
+    msg.innerText = message;
+
+    setTimeout(() => {
+      msg.remove();
+    }, 8000);
+
+    snackbarElement.appendChild(msg);
+  }
+
   createLobby(): Lobby {
-    const lobby = new Lobby(document.body);
+    const lobby = new Lobby(mainElement);
     lobby.ongamestart = this.startGame.bind(this);
     return lobby;
   }
@@ -114,6 +134,7 @@ class Client {
   createGame(): Game {
     const game = new Game();
     game.clients = this.lobby.state.clients;
+    game.htmlElement = mainElement;
     game.onInput = (inp) => {
       this.sendClientInput({
         id: inp.seq,
@@ -132,7 +153,7 @@ class Client {
 
   requstLobbies() {
     if (this.lobbies == undefined) {
-      this.lobbies = new LobbyList(document.body);
+      this.lobbies = new LobbyList(mainElement);
       this.lobbies.onJoin = this.connectToLobby.bind(this);
       this.lobbies.onCreate = (name: string) => {
         this.stopLobbyListInterval();
@@ -175,7 +196,7 @@ class Client {
       };
       ask.appendChild(inp);
       ask.appendChild(btn);
-      document.body.replaceChildren(ask);
+      mainElement.replaceChildren(ask);
     });
   }
 }

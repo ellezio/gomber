@@ -1,0 +1,29 @@
+* {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	overflow: hidden;
+}
+
+html {
+	background-color: #505050;
+}
+
+#snackbar-block {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+}
+
+#snackbar-block .error-message {
+	background-color: red;
+	color: white;
+	padding: 0.5rem 0.5rem;
+	margin-left: 0.5rem;
+	margin-bottom: 0.5rem;
+	border-radius: 10px;
+	width: fit-content;
+	max-width: 400px;
+}

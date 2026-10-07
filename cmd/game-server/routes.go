@@ -9,9 +9,7 @@ import (
 )
 
 func setupRoutes(gameServer *game.Server) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/static/index.html")
-	})
+	http.Handle("/", http.FileServer(http.Dir("web/static")))
 
 	http.Handle("/dist/", http.StripPrefix("/dist/", http.FileServer(http.Dir("web/dist"))))
 
