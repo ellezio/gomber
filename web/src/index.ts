@@ -61,11 +61,16 @@ class Client {
     this.conn.send(`lobby:setMap:${name}`);
   }
 
+  sendLobbyLeave() {
+    this.conn.send("lobby:leave");
+  }
+
   handleMessage(evt: MessageEvent<any>) {
     const msg: ServerMessage = JSON.parse(evt.data);
 
     switch (msg.type) {
       case "lobbyState":
+        this.stopLobbyListInterval();
         this.handleLobbyState(msg.details);
         break;
       case "lobbyList":
@@ -133,6 +138,7 @@ class Client {
     const lobby = new Lobby(mainElement);
     lobby.onGameStart = () => this.startGame(true);
     lobby.onMapSelect = this.sendSetMap.bind(this);
+    lobby.onLeave = this.leaveLobby.bind(this);
     return lobby;
   }
 
@@ -151,7 +157,6 @@ class Client {
   }
 
   connectToLobby(lobbyID: number) {
-    this.stopLobbyListInterval();
     this.lobby = this.createLobby();
     this.sendLobbyConnect(lobbyID);
   }
@@ -175,6 +180,11 @@ class Client {
     this.game.start();
   }
 
+  leaveLobby() {
+    this.sendLobbyLeave();
+    this.requstLobbies();
+  }
+
   startLobbyListInterval() {
     this.stopLobbyListInterval();
     this.sendLobbyList();
@@ -185,7 +195,9 @@ class Client {
   }
 
   stopLobbyListInterval() {
+    if (this.lobbyListInterval === undefined) return;
     window.clearInterval(this.lobbyListInterval);
+    this.lobbyListInterval = undefined;
   }
 
   async askName() {

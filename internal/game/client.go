@@ -366,6 +366,8 @@ func (c *ClientSession) handleLobbyMessage(ctx context.Context, crm *ClientRequs
 		return c.handleLobbyCreate(ctx, crm)
 	case bytes.Equal(command, []byte("setMap")):
 		return c.handleSetGameMap(crm)
+	case bytes.Equal(command, []byte("leave")):
+		return c.handleLobbyLeave()
 	default:
 		return errors.New("invalid lobby command")
 	}
@@ -432,6 +434,20 @@ func (c *ClientSession) handleSetGameMap(crm *ClientRequstMessage) error {
 
 	mapName := string(crm.Rest())
 	return c.lobbyHandler.SetMap(mapName)
+}
+
+func (c *ClientSession) handleLobbyLeave() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lobbyHandler == nil {
+		return errors.New("not in lobby")
+	}
+
+	c.lobbyHandler.Disconnect()
+	c.lobbyHandler = nil
+
+	return nil
 }
 
 func (c *ClientSession) joinToLobby(ctx context.Context, lobbyID int) error {

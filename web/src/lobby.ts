@@ -16,6 +16,7 @@ export class Lobby {
   state: lobbyState;
   onGameStart: () => void;
   onMapSelect: (mapName: string) => void;
+  onLeave: () => void;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -76,6 +77,14 @@ export class Lobby {
       lobby.replaceChild(clients, oldClients);
     } else {
       lobby.appendChild(clients);
+    }
+
+    if (!document.getElementById("lobby-leave-btn")) {
+      const btn = document.createElement("button");
+      btn.id = "lobby-leave-btn";
+      btn.innerText = "Leave";
+      btn.onclick = this.onLeave;
+      lobby.appendChild(btn);
     }
 
     if (!document.getElementById("lobby-start-game-btn")) {
