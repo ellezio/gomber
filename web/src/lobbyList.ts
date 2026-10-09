@@ -56,9 +56,4 @@ export class LobbyList {
 
     this.root.replaceChildren(root);
   }
-
-  handleMessage(data: LobbyItem[]) {
-    this.update(data);
-    this.render();
-  }
 }

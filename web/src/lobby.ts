@@ -99,9 +99,4 @@ export class Lobby {
       this.root.replaceChildren(lobby);
     }
   }
-
-  handleMessage(data: lobbyState, render: boolean) {
-    this.update(data);
-    if (render) this.render();
-  }
 }

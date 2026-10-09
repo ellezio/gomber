@@ -23,6 +23,7 @@ func (GameFinishedMessage) iLobbyMessege()     {}
 func (ClientInpuMessage) iLobbyMessege()       {}
 func (UpdateClientMessage) iLobbyMessege()     {}
 func (CloseLobbyMessage) iLobbyMessege()       {}
+func (GameStartedMessage) iLobbyMessege()      {}
 
 type ConnectClientMessage struct {
 	info     ClientInfo
@@ -44,6 +45,8 @@ type SetMapMessage struct {
 	mapName  string
 	response chan<- LobbyResponse
 }
+
+type GameStartedMessage struct{}
 
 type GameFinishedMessage struct {
 	gameResult GameResult
@@ -296,6 +299,9 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 		err := l.setMap(msg.clientID, msg.mapName)
 		msg.response <- LobbyResponse{err: err}
 
+	case GameStartedMessage:
+		l.broadcaseClientMessage(msg)
+
 	case GameFinishedMessage:
 		close(l.gameCh)
 		l.gameCh = nil
@@ -422,6 +428,9 @@ func (l *Lobby) runGame(clientId int) error {
 
 	go func() {
 		l.state.Store(state_inGame)
+
+		l.ch <- GameStartedMessage{}
+
 		gr := game.Run(gameMap)
 
 		if l.state.Load() == state_closing {

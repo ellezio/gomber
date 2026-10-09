@@ -32,13 +32,14 @@ type ClientMessage interface {
 	iClientMessage()
 }
 
-func (ClientGameState) iClientMessage() {}
-func (LobbyState) iClientMessage()      {}
-func (GameResult) iClientMessage()      {}
-func (NameMessage) iClientMessage()     {}
-func (ErrorMessage) iClientMessage()    {}
-func (LobbyClosed) iClientMessage()     {}
-func (Lobbies) iClientMessage()         {}
+func (GameStartedMessage) iClientMessage() {}
+func (ClientGameState) iClientMessage()    {}
+func (LobbyState) iClientMessage()         {}
+func (GameResult) iClientMessage()         {}
+func (NameMessage) iClientMessage()        {}
+func (ErrorMessage) iClientMessage()       {}
+func (LobbyClosed) iClientMessage()        {}
+func (Lobbies) iClientMessage()            {}
 
 type Lobbies []*LobbyInfo
 
@@ -588,6 +589,11 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 		msg = Message{
 			Type:    "snapshot",
 			Details: m,
+		}
+
+	case GameStartedMessage:
+		msg = Message{
+			Type: "gameStarted",
 		}
 
 	default:
