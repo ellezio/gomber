@@ -19,41 +19,36 @@ export class LobbyList {
   }
 
   render() {
-    const root = document.createElement("div");
+    const newLobbyInp = this.root.querySelector(
+      ".new-lobby-input",
+    ) as HTMLInputElement;
 
-    const header = document.createElement("h1");
-    header.innerText = "Lobbies";
-    root.appendChild(header);
+    const newLobbyBtn = this.root.querySelector(
+      ".new-lobby-button",
+    ) as HTMLButtonElement;
 
-    const newLobbyInput = document.createElement("input");
-    newLobbyInput.name = "lobby_name";
-    root.appendChild(newLobbyInput);
+    const lobbyList = this.root.querySelector(".lobby-list") as HTMLDivElement;
 
-    const newLobbyBtn = document.createElement("button");
-    newLobbyBtn.innerText = "Add";
     newLobbyBtn.onclick = () => {
-      const value = newLobbyInput.value;
+      const value = newLobbyInp.value;
       this.onCreate(value);
     };
-    root.appendChild(newLobbyBtn);
 
     if (this.lobbies) {
-      const lobbies = document.createElement("div");
-
+      const items = [];
       for (const lobby of this.lobbies) {
         const item = document.createElement("div");
-        item.innerText = `${lobby.id} ${lobby.name}`;
-        const btn = document.createElement("button");
-        btn.innerText = "Join";
+        item.classList = "lobby-item";
+        item.innerHTML = `
+          <div class="left">${lobby.name}</div>
+          <button class="operation-button">Join</button>
+        `;
+        const btn = item.querySelector("button");
         btn.onclick = () => this.onJoin?.(lobby.id);
-
-        item.appendChild(btn);
-        lobbies.appendChild(item);
+        items.push(item);
       }
 
-      root.appendChild(lobbies);
+      lobbyList.replaceChildren(...items);
     }
-
-    this.root.replaceChildren(root);
   }
 }

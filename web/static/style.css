@@ -38,11 +38,14 @@
 	--card-border: var(--color-bg-4);
 	--card-bg: var(--color-bg-2);
 
-	--accept-btn-bg: var(--color-aqua-0);
-	--accept-btn-hover-bg: var(--color-aqua-1);
-	--accept-btn-text: var(--color-fg-0);
+	--list-item-bg: var(--color-bg-4);
+
+	--operation-btn-bg: var(--color-aqua-0);
+	--operation-btn-hover-bg: var(--color-aqua-1);
+	--operation-btn-text: var(--color-fg-0);
 
 	--outline: var(--color-aqua-1);
+
 	--error-bg: var(--color-red-0);
 	--error-text: var(--color-fg-1);
 }
@@ -57,52 +60,78 @@ html {
 	background-color: var(--primary-bg);
 }
 
-input:focus,
-button:focus {
-	outline: 2px solid var(--outline);
+.hidden {
+	display: none !important;
 }
 
-#login-view {
-	height: 100%;
-}
-
-#login-view .login-card {
-	color: var(--primary-text);
-	display: flex;
-	flex-direction: column;
-	gap: 1rem;
-	position: relative;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	width: fit-content;
-	border: 2px solid var(--card-border);
-	padding: 1rem;
-	background-color: var(--card-bg);
-}
-
-#login-view .login-card h2 {
-	margin: 0 auto 1rem;
-}
-
-#login-view .login-card input {
+input {
 	background-color: var(--secondary-bg);
 	padding: 0.2rem;
 	border: none;
 	color: var(--primary-text);
 }
 
-#login-view .login-card button {
-	background-color: var(--accept-btn-bg);
-	color: var(--accept-btn-text);
+input:focus,
+button:focus {
+	outline: 2px solid var(--outline);
+}
+
+.operation-button {
+	background-color: var(--operation-btn-bg);
+	color: var(--operation-btn-text);
 	font-weight: 600;
 	padding: 0.2rem;
 	border: none;
 	cursor: pointer;
 }
 
-#login-view .login-card button:hover {
-	background-color: var(--accept-btn-hover-bg);
+.operation-button:hover {
+	background-color: var(--operation-btn-hover-bg);
+}
+
+.card {
+	color: var(--primary-text);
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	width: fit-content;
+	border: 2px solid var(--card-border);
+	padding: 1rem;
+	background-color: var(--card-bg);
+}
+
+#login-view {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+}
+
+#login-view .card h2 {
+	margin: 0 auto 1rem;
+}
+
+#lobby-list-view {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+}
+
+#lobby-list-view .lobby-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+
+#lobby-list-view .lobby-item {
+	display: flex;
+	justify-content: space-between;
+	background-color: var(--list-item-bg);
+}
+
+#lobby-list-view .lobby-item .left {
+	padding: 0.2rem 0.5rem;
 }
 
 #snackbar-block {

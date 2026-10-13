@@ -4,6 +4,7 @@ import { Lobby, lobbyState } from "./lobby";
 import { LobbyItem, LobbyList } from "./lobbyList";
 
 const loginView = document.getElementById("login-view");
+const lobbyListView = document.getElementById("lobby-list-view");
 const mainView = document.getElementById("main-view");
 const allViews = document.querySelectorAll(".view");
 
@@ -215,7 +216,7 @@ class Client {
 
   requstLobbies() {
     if (this.lobbies == undefined) {
-      this.lobbies = new LobbyList(mainView);
+      this.lobbies = new LobbyList(lobbyListView);
       this.lobbies.onJoin = this.connectToLobby.bind(this);
       this.lobbies.onCreate = (name: string) => {
         this.stopLobbyListInterval();
@@ -264,7 +265,7 @@ class Client {
 
   showLobbies() {
     this.state = ClientState.InLobbyList;
-    this.showView(mainView);
+    this.showView(lobbyListView);
     this.requstLobbies();
   }
 
@@ -280,8 +281,9 @@ class Client {
   }
 
   showView(elm: HTMLElement) {
-    allViews.forEach((elm) => elm.setAttribute("hidden", "true"));
-    elm.hidden = false;
+    console.dir(elm);
+    allViews.forEach((elm) => elm.classList.toggle("hidden", true));
+    elm.classList.remove("hidden");
   }
 }
 

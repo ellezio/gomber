@@ -7,15 +7,26 @@
 </head>
 
 <body>
-	<div id="login-view" class="view" hidden>
-		<div class="login-card">
+	<div id="login-view" class="view hidden">
+		<div class="card">
 			<h2>Login</h2>
 			<div><b>Name: </b><input /></div>
-			<button>Enter</button>
+			<button class="operation-button">Enter</button>
 		</div>
 	</div>
 
-	<div id="main-view" class="view"></div>
+	<div id="lobby-list-view" class="view hidden">
+		<div class="card">
+			<h2>Lobbies</h2>
+			<div>
+				<input class="new-lobby-input" placeholder="New lobby name" />
+				<button class="new-lobby-button operation-button">Add lobby</button>
+			</div>
+			<div class="lobby-list"></div>
+		</div>
+	</div>
+
+	<div id="main-view" class="view hidden"></div>
 
 	<div id="snackbar-block"></div>
 </body>
