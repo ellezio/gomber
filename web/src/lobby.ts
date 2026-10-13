@@ -2,6 +2,7 @@ export type clients = {
   id: number;
   name: string;
   latency: number;
+  admin: boolean;
 }[];
 
 export type lobbyState = {
@@ -27,19 +28,21 @@ export class Lobby {
   }
 
   render() {
-    let lobby = document.getElementById("lobby-menu");
-    const firstRender = !lobby;
-    if (!lobby) {
-      lobby = document.createElement("div");
-      lobby.id = "lobby-menu";
-    }
+    const leftPane = this.root.querySelector(".left");
+    const topBar = leftPane.querySelector(".lobby-top-bar");
+    const info = topBar.querySelector(".lobby-info");
+    const leaveBtn = topBar.querySelector(".lobby-leave") as HTMLButtonElement;
+    const clientList = leftPane.querySelector(".lobby-client-list");
+    const rightPane = this.root.querySelector(".right");
+    const mapSelectorPane = rightPane.querySelector(".map-selector-pane");
+    const startGameBtn = rightPane.querySelector(
+      ".lobby-start-game",
+    ) as HTMLButtonElement;
 
-    if (!document.getElementById("lobby-name")) {
-      const title = document.createElement("h2");
-      title.id = "lobby-name";
-      title.innerText = this.state.name;
-      lobby.appendChild(title);
-    }
+    info.innerHTML = `
+      <div>${this.state.name} - ${this.state.currentMap}</div>
+      <div>${this.state.clients?.length ?? 0} / [map cap]</div>
+    `;
 
     const oldMapSelect = document.getElementById(
       "map-select",
@@ -56,47 +59,23 @@ export class Lobby {
         mapOption.selected = map == this.state.currentMap;
         mapSelect.appendChild(mapOption);
       }
-      if (firstRender) {
-        lobby.appendChild(mapSelect);
-      } else {
-        lobby.replaceChild(mapSelect, oldMapSelect);
-      }
-      console.log(mapSelect.value, this.state.currentMap);
+
+      mapSelectorPane.replaceChildren(mapSelect);
     }
 
-    const clients = document.createElement("div");
-    clients.id = "lobby-clients";
+    const clients = [];
     for (const client of this.state.clients) {
       const c = document.createElement("div");
-      c.innerHTML = `<span>${client.name}</span> | <span>${client.latency} ms</span>`;
-      clients.appendChild(c);
+      c.classList = "list-item";
+      if (client.admin) {
+        c.classList.add("admin");
+      }
+      c.innerHTML = `<span class="lobby-client-name">${client.name}</span> <span>${client.latency} ms</span>`;
+      clients.push(c);
     }
+    clientList.replaceChildren(...clients);
 
-    const oldClients = document.getElementById("lobby-clients");
-    if (oldClients) {
-      lobby.replaceChild(clients, oldClients);
-    } else {
-      lobby.appendChild(clients);
-    }
-
-    if (!document.getElementById("lobby-leave-btn")) {
-      const btn = document.createElement("button");
-      btn.id = "lobby-leave-btn";
-      btn.innerText = "Leave";
-      btn.onclick = this.onLeave;
-      lobby.appendChild(btn);
-    }
-
-    if (!document.getElementById("lobby-start-game-btn")) {
-      const btn = document.createElement("button");
-      btn.id = "lobby-start-game-btn";
-      btn.innerText = "Start game";
-      btn.onclick = this.onGameStart;
-      lobby.appendChild(btn);
-    }
-
-    if (firstRender) {
-      this.root.replaceChildren(lobby);
-    }
+    leaveBtn.onclick = this.onLeave;
+    startGameBtn.onclick = this.onGameStart;
   }
 }

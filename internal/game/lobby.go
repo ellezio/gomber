@@ -211,11 +211,16 @@ func (lc *LobbyClient) OnNewGameState(state ClientGameState) {
 	lc.sendFn(state)
 }
 
+type LobbyClientInfo struct {
+	ClientInfo
+	Admin bool `json:"admin"`
+}
+
 type LobbyState struct {
-	Name       string       `json:"name"`
-	Clients    []ClientInfo `json:"clients"`
-	GameMaps   []string     `json:"gameMaps"`
-	CurrentMap string       `json:"currentMap"`
+	Name       string            `json:"name"`
+	Clients    []LobbyClientInfo `json:"clients"`
+	GameMaps   []string          `json:"gameMaps"`
+	CurrentMap string            `json:"currentMap"`
 }
 
 const (
@@ -451,7 +456,7 @@ func (l *Lobby) runGame(clientId int) error {
 func (l *Lobby) State() LobbyState {
 	ls := LobbyState{Name: l.name}
 	for _, c := range l.clients {
-		ls.Clients = append(ls.Clients, ClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency})
+		ls.Clients = append(ls.Clients, LobbyClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency, Admin: c.Admin})
 	}
 
 	ls.GameMaps = l.gameMaps.GetMapsName()

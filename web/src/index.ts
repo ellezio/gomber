@@ -5,6 +5,7 @@ import { LobbyItem, LobbyList } from "./lobbyList";
 
 const loginView = document.getElementById("login-view");
 const lobbyListView = document.getElementById("lobby-list-view");
+const lobbyView = document.getElementById("lobby-view");
 const mainView = document.getElementById("main-view");
 const allViews = document.querySelectorAll(".view");
 
@@ -187,7 +188,7 @@ class Client {
   }
 
   createLobby(): Lobby {
-    const lobby = new Lobby(mainView);
+    const lobby = new Lobby(lobbyView);
     lobby.onGameStart = () => this.startGame(true);
     lobby.onMapSelect = this.sendSetMap.bind(this);
     lobby.onLeave = this.leaveLobby.bind(this);
@@ -271,7 +272,7 @@ class Client {
 
   showLobby() {
     this.state = ClientState.InLobby;
-    this.showView(mainView);
+    this.showView(lobbyView);
     this.lobby.render();
   }
 
@@ -281,7 +282,6 @@ class Client {
   }
 
   showView(elm: HTMLElement) {
-    console.dir(elm);
     allViews.forEach((elm) => elm.classList.toggle("hidden", true));
     elm.classList.remove("hidden");
   }

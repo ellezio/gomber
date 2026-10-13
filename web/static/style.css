@@ -40,6 +40,8 @@
 
 	--list-item-bg: var(--color-bg-4);
 
+	--lobby-admin: var(--color-yellow-1);
+
 	--operation-btn-bg: var(--color-aqua-0);
 	--operation-btn-hover-bg: var(--color-aqua-1);
 	--operation-btn-text: var(--color-fg-0);
@@ -91,13 +93,26 @@ button:focus {
 
 .card {
 	color: var(--primary-text);
-	display: flex;
-	flex-direction: column;
 	gap: 1rem;
 	width: fit-content;
 	border: 2px solid var(--card-border);
 	padding: 1rem;
 	background-color: var(--card-bg);
+}
+
+.card-col {
+	display: flex;
+	flex-direction: column;
+}
+
+.list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+
+.list-item {
+	background-color: var(--list-item-bg);
 }
 
 #login-view {
@@ -118,20 +133,61 @@ button:focus {
 	height: 100%;
 }
 
-#lobby-list-view .lobby-list {
-	display: flex;
-	flex-direction: column;
-	gap: 0.2rem;
-}
-
-#lobby-list-view .lobby-item {
+#lobby-list-view .list-item {
 	display: flex;
 	justify-content: space-between;
-	background-color: var(--list-item-bg);
 }
 
-#lobby-list-view .lobby-item .left {
+#lobby-list-view .list-item .left {
 	padding: 0.2rem 0.5rem;
+}
+
+#lobby-view {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+}
+#lobby-view .lobby-top-bar {
+	display: flex;
+	gap: 1rem;
+}
+
+#lobby-view .lobby-top-bar .lobby-info {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+#lobby-view > div {
+	display: flex;
+	gap: 1rem;
+}
+
+#lobby-view .left,
+#lobby-view .right {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+#lobby-view .lobby-client-list {
+	width: stretch;
+}
+
+#lobby-view .lobby-client-list .list-item {
+	display: flex;
+	justify-content: space-between;
+	padding: 0.2rem 0.5rem;
+}
+
+#lobby-view .lobby-client-list .admin .lobby-client-name {
+	color: var(--lobby-admin);
+}
+
+#lobby-view .map-selector-pane {
+	flex: 1;
+	width: 100%;
 }
 
 #snackbar-block {

@@ -38,7 +38,7 @@ export class LobbyList {
       const items = [];
       for (const lobby of this.lobbies) {
         const item = document.createElement("div");
-        item.classList = "lobby-item";
+        item.classList = "list-item";
         item.innerHTML = `
           <div class="left">${lobby.name}</div>
           <button class="operation-button">Join</button>

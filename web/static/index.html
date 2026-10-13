@@ -8,7 +8,7 @@
 
 <body>
 	<div id="login-view" class="view hidden">
-		<div class="card">
+		<div class="card card-col">
 			<h2>Login</h2>
 			<div><b>Name: </b><input /></div>
 			<button class="operation-button">Enter</button>
@@ -16,13 +16,29 @@
 	</div>
 
 	<div id="lobby-list-view" class="view hidden">
-		<div class="card">
+		<div class="card card-col">
 			<h2>Lobbies</h2>
 			<div>
 				<input class="new-lobby-input" placeholder="New lobby name" />
 				<button class="new-lobby-button operation-button">Add lobby</button>
 			</div>
-			<div class="lobby-list"></div>
+			<div class="lobby-list list"></div>
+		</div>
+	</div>
+
+	<div id="lobby-view" class="view hidden">
+		<div>
+			<div class="left">
+				<div class="card lobby-top-bar">
+					<div class="lobby-info"></div>
+					<button class="operation-button lobby-leave">Leave</button>
+				</div>
+				<div class="card card-col lobby-client-list list"></div>
+			</div>
+			<div class="right">
+				<div class="card card-col map-selector-pane"></div>
+				<button class="operation-button lobby-start-game">Start game</button>
+			</div>
 		</div>
 	</div>
 

@@ -73,7 +73,7 @@ func TestLobbyLifetime(t *testing.T) {
 		secondHandler.UpdateLatency(42)
 		for _, updates := range []<-chan ClientMessage{firstUpdates, secondUpdates} {
 			state = receiveLobbyState(t, updates)
-			clients := make(map[string]ClientInfo)
+			clients := make(map[string]LobbyClientInfo)
 			for _, info := range state.Clients {
 				clients[info.Name] = info
 			}
