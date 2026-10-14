@@ -7,6 +7,8 @@ export class CircularBuffer<T> {
   constructor(cap: number) {
     this.cap = cap + 1;
     this.buf = Array<T>(this.cap);
+    this.front = 0;
+    this.rear = 0;
   }
 
   push(item: T): boolean {
@@ -39,7 +41,7 @@ export class CircularBuffer<T> {
     if (this.isEmpty()) {
       return null;
     }
-    return this.buf[this.rear]!;
+    return this.buf[(this.rear - 1 + this.cap) % this.cap]!;
   }
 
   isEmpty(): boolean {
