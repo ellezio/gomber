@@ -4,10 +4,9 @@ import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
+import { HUD } from "./hud";
 import { Action, InputHandler, unprocessedInput } from "./input";
 import { clients } from "./lobby";
-import { PlayerInfo } from "./playerInfo";
-import { PlayerList } from "./playersList";
 
 type entityInMsg = {
   id: number;
@@ -45,8 +44,8 @@ export type boardUpdateMessage = {
 export class Game {
   htmlElement: HTMLElement;
 
-  playerList: PlayerList;
-  playerInfo: PlayerInfo;
+  hud = new HUD();
+
   board: Board;
   inputHandler = new InputHandler();
   clients: clients;
@@ -69,13 +68,15 @@ export class Game {
   onInput: (input: unprocessedInput) => void;
 
   async start() {
-    this.canvas.width = 1000;
-    this.canvas.height = 600;
-    this.canvas.style.border = "3px solid #000";
+    const width = window.innerWidth;
+    const height = window.innerHeight;
 
-    this.playerList = new PlayerList(this, 0, 1);
-    this.board = new Board(200, this.inputHandler);
-    this.playerInfo = new PlayerInfo(650, 1);
+    this.canvas.width = width;
+    this.canvas.height = height;
+
+    this.hud.updateResolution(width, height);
+
+    this.board = new Board(0, this.inputHandler);
 
     this.populateDOM();
 
@@ -87,12 +88,26 @@ export class Game {
     );
   }
 
+  public updateClients(clients: clients) {
+    this.clients = clients;
+    this.hud.updatePlayersList(
+      clients.map((c) => ({
+        name: c.name,
+        hp: 0,
+        latency: c.latency,
+      })),
+    );
+  }
+
   public handleMessage(data: boardUpdateMessage) {
     for (const player of data.board.players) {
       if (player.id === data.controlledEntityId) {
         if (this.board.player === undefined) {
           this.board.player = Player.fromMessage(player);
-          this.playerInfo.player = this.board.player;
+          this.hud.updatePlayerStats({
+            hp: this.board.player.hp,
+            bombsCount: this.board.player.availableBombs,
+          });
         }
 
         if (data.processedInput === null) {
@@ -231,9 +246,17 @@ export class Game {
       input = this.inputHandler.currentInput(dt);
     }
 
+    const offX = Math.round(this.canvas.width / 2 - this.board.width / 2);
+    const offY = Math.round(this.canvas.height / 2 - this.board.height / 2);
+
+    this.ctx.translate(offX, offY);
     this.board.update(this.ctx, input, dt);
-    this.playerInfo.update(this.ctx);
-    this.playerList.update(this.ctx);
+    this.ctx.translate(-offX, -offY);
+    this.hud.updatePlayerStats({
+      hp: this.board.player.hp,
+      bombsCount: this.board.player.availableBombs,
+    });
+    this.hud.render(this.ctx);
 
     if (input != null) {
       const lastInput = this.inputBuffer.peekRear();

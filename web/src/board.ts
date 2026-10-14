@@ -11,6 +11,9 @@ const SCALE = 1;
 export class Board {
   grid: TileType[][];
 
+  width: number;
+  height: number;
+
   player: Player;
   entities: Entity[] = [];
   bombs: Bomb[] = [];
@@ -23,11 +26,11 @@ export class Board {
   ) {}
 
   setGrid(grid: TileType[][]) {
-    // const rowsCount = grid.length;
-    // const colsCount = grid[0].length;
+    const rowsCount = grid.length;
+    const colsCount = grid[0].length;
 
-    // this.canvas.width = colsCount * 50;
-    // this.canvas.height = rowsCount * 50;
+    this.width = colsCount * 50;
+    this.height = rowsCount * 50;
 
     this.grid = grid;
   }

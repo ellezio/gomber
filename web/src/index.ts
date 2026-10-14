@@ -120,7 +120,7 @@ class Client {
     }
 
     if (this.game) {
-      this.game.clients = state.clients;
+      this.game.updateClients(state.clients);
     }
   }
 
@@ -197,7 +197,7 @@ class Client {
 
   createGame(): Game {
     const game = new Game();
-    game.clients = this.lobby.state.clients;
+    game.updateClients(this.lobby.state.clients);
     game.htmlElement = mainView;
     game.onInput = (inp) => {
       this.sendClientInput({
@@ -219,14 +219,16 @@ class Client {
     if (this.lobbies == undefined) {
       this.lobbies = new LobbyList(lobbyListView);
       this.lobbies.onJoin = this.connectToLobby.bind(this);
-      this.lobbies.onCreate = (name: string) => {
-        this.stopLobbyListInterval();
-        this.lobby = this.createLobby();
-        this.sendLobbyCreate(name);
-        this.state = ClientState.JoiningLobby;
-      };
+      this.lobbies.onCreate = this.onLobbyCreate.bind(this);
     }
     this.startLobbyListInterval();
+  }
+
+  onLobbyCreate(name: string) {
+    this.stopLobbyListInterval();
+    this.lobby = this.createLobby();
+    this.sendLobbyCreate(name);
+    this.state = ClientState.JoiningLobby;
   }
 
   startGame(sendMessage: boolean) {
@@ -287,8 +289,22 @@ class Client {
   }
 }
 
-window.onload = async function () {
+function testShowGame() {
   const client = new Client();
   client.connect();
-  client.showLoginPage();
+  // client.showLoginPage();
+
+  client.conn.onopen = () => {
+    client.sendClientName("test");
+    client.onLobbyCreate("test");
+    window.setTimeout(() => client.startGame(true), 10);
+  };
+}
+
+window.onload = async function () {
+  // const client = new Client();
+  // client.connect();
+  // client.showLoginPage();
+
+  testShowGame();
 };
