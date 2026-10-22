@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	updatesRate int = 61
+	updatesRate int = 30
 
 	TileSize = 50
 )

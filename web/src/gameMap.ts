@@ -1,6 +1,7 @@
 export type TileType = number;
 
-const SCALE = 1;
+export const TILE_SIZE = 50;
+export const SCALE = 1;
 
 export class GameMap {
   grid: TileType[][];
@@ -12,8 +13,8 @@ export class GameMap {
     const rowsCount = grid.length;
     const colsCount = grid[0].length;
 
-    this.width = colsCount * 50;
-    this.height = rowsCount * 50;
+    this.width = colsCount * TILE_SIZE;
+    this.height = rowsCount * TILE_SIZE;
 
     this.grid = grid;
   }
@@ -34,7 +35,7 @@ export class GameMap {
           ctx.fillStyle = "brown";
         }
 
-        const size = 50 * SCALE;
+        const size = TILE_SIZE * SCALE;
         ctx.fillRect(x * size, y * size, size, size);
       }
     }

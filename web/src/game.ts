@@ -1,4 +1,4 @@
-import { GameMap, TileType } from "./gameMap";
+import { GameMap, SCALE, TileType } from "./gameMap";
 import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
@@ -7,8 +7,7 @@ import { Player } from "./entities/player";
 import { HUD } from "./hud";
 import { Action, InputController, unprocessedInput } from "./input";
 import { clients } from "./lobby";
-
-const SCALE = 1;
+import { checkPlayerCollision } from "./collision";
 
 type entityInMsg = {
   id: number;
@@ -48,12 +47,12 @@ export class Game {
 
   hud = new HUD();
 
-  board: GameMap;
+  gameMap: GameMap;
   inputController = new InputController();
   clients: clients;
 
   player: Player;
-  entities: Entity[] = [];
+  players: Player[] = [];
   bombs: Bomb[] = [];
   explosions: Explosion[] = [];
   powerups: Entity[] = [];
@@ -84,7 +83,7 @@ export class Game {
 
     this.hud.updateResolution(width, height);
 
-    this.board = new GameMap();
+    this.gameMap = new GameMap();
 
     window.onkeyup = window.onkeydown =
       this.inputController.handleKeyboardEvent;
@@ -128,9 +127,10 @@ export class Game {
     const input = this.inputController.currentInput(dt);
 
     if (input != null) {
-      // if (this.player !== undefined) {
-      //   this.inputHandler.handleInput(input, this.player);
-      // }
+      if (this.player !== undefined) {
+        this.inputController.handleInput(input, this.player);
+        checkPlayerCollision(this.player, this.gameMap, this.bombs);
+      }
 
       const lastInput = this.inputBuffer.peekRear();
       const uinput: unprocessedInput = {
@@ -155,21 +155,15 @@ export class Game {
   private render() {
     this.clear();
 
-    const offX = Math.round(this.canvas.width / 2 - this.board.width / 2);
-    const offY = Math.round(this.canvas.height / 2 - this.board.height / 2);
+    const offX = Math.round(this.canvas.width / 2 - this.gameMap.width / 2);
+    const offY = Math.round(this.canvas.height / 2 - this.gameMap.height / 2);
 
     this.ctx.translate(offX, offY);
 
-    this.board.render(this.ctx);
+    this.gameMap.render(this.ctx);
 
-    for (const entity of this.entities) {
-      // if (this.player?.collision.check(entity)) {
-      //   entity.color = "green";
-      // } else {
-      //   entity.color = "blue";
-      // }
-
-      entity.render(this.ctx, SCALE);
+    for (const player of this.players) {
+      player.render(this.ctx, SCALE);
     }
 
     this.bombs.forEach((b) => b.render(this.ctx, SCALE));
@@ -195,73 +189,7 @@ export class Game {
   }
 
   public handleMessage(data: boardUpdateMessage) {
-    for (const player of data.board.players) {
-      if (player.id === data.controlledEntityId) {
-        if (this.player === undefined) {
-          this.player = Player.fromMessage(player);
-          this.hud.updatePlayerStats({
-            hp: this.player.hp,
-            bombsCount: this.player.availableBombs,
-          });
-        }
-
-        if (data.processedInput === null) {
-          this.player.updateStatsFromMessage(player);
-          continue;
-        }
-
-        this.player.updateFromMessage(player);
-        let processingInput = this.inputBuffer.pop();
-
-        while (
-          processingInput &&
-          processingInput.seq != data.processedInput.id
-        ) {
-          processingInput = this.inputBuffer.pop();
-        }
-
-        for (const input of this.inputBuffer) {
-          this.inputController.handleInput(input.input, this.player);
-        }
-
-        // if (processingInput) {
-        //   if (processingInput.inputId !== data.processedInput.id) {
-        //     this.unprocessedInputs.length = 0;
-        //     this.board.player.position.x = player.pos.x;
-        //     this.board.player.position.y = player.pos.y;
-        //     this.board.player.speed = player.speed;
-        //   } else {
-        //     if (
-        //       processingInput.x !== player.pos.x ||
-        //       processingInput.y !== player.pos.y ||
-        //       processingInput.speed !== player.speed
-        //     ) {
-        //       this.board.player.position.x = player.pos.x;
-        //       this.board.player.position.y = player.pos.y;
-        //       this.board.player.speed = player.speed;
-        //       for (const uinp of this.unprocessedInputs) {
-        //         const command = this.inputHandler.handleInput(uinp.input);
-        //         command && command(this.board.player);
-        //       }
-        //     }
-        //   }
-        // }
-      } else {
-        // const obj = this.board.entities.find(
-        //   (obj) => obj.id === player.id,
-        // ) as Player;
-        // if (obj !== undefined) {
-        //   obj.position.x = player.pos.x;
-        //   obj.position.y = player.pos.y;
-        //   obj.speed = player.speed;
-        // } else {
-        //   const newPlayer = Player.fromMessage(player);
-        //   this.board.entities.push(newPlayer);
-        // }
-      }
-    }
-
-    this.entities = data.board.players
+    this.players = data.board.players
       .filter((p) => p.id !== data.controlledEntityId)
       .map((p) => Player.fromMessage(p));
 
@@ -301,10 +229,42 @@ export class Game {
         );
       }) ?? [];
 
-    if (this.board.grid === undefined) {
-      this.board.setGrid(data.board.grid);
+    if (this.gameMap.grid === undefined) {
+      this.gameMap.setGrid(data.board.grid);
     } else {
-      this.board.updateGrid(data.board.grid);
+      this.gameMap.updateGrid(data.board.grid);
+    }
+
+    for (const player of data.board.players) {
+      if (player.id === data.controlledEntityId) {
+        if (this.player === undefined) {
+          this.player = Player.fromMessage(player);
+          this.hud.updatePlayerStats({
+            hp: this.player.hp,
+            bombsCount: this.player.availableBombs,
+          });
+        }
+
+        if (data.processedInput === null) {
+          this.player.updateStatsFromMessage(player);
+          continue;
+        }
+
+        this.player.updateFromMessage(player);
+        let processingInput = this.inputBuffer.pop();
+
+        while (
+          processingInput &&
+          processingInput.seq != data.processedInput.id
+        ) {
+          processingInput = this.inputBuffer.pop();
+        }
+
+        for (const input of this.inputBuffer) {
+          this.inputController.handleInput(input.input, this.player);
+          checkPlayerCollision(this.player, this.gameMap, this.bombs);
+        }
+      }
     }
   }
 
