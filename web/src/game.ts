@@ -5,7 +5,7 @@ import { Entity } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { HUD } from "./hud";
-import { Action, InputHandler, unprocessedInput } from "./input";
+import { Action, InputController, unprocessedInput } from "./input";
 import { clients } from "./lobby";
 
 const SCALE = 1;
@@ -49,7 +49,7 @@ export class Game {
   hud = new HUD();
 
   board: GameMap;
-  inputHandler = new InputHandler();
+  inputController = new InputController();
   clients: clients;
 
   player: Player;
@@ -86,7 +86,8 @@ export class Game {
 
     this.board = new GameMap();
 
-    window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
+    window.onkeyup = window.onkeydown =
+      this.inputController.handleKeyboardEvent;
 
     this.updateInterval = window.setInterval(
       this.gameLoop.bind(this),
@@ -122,17 +123,15 @@ export class Game {
   }
 
   private handleInput(dt: number) {
-    let input: { actions: Action[]; dt: number } | null = null;
-    if (this.player.active) {
-      input = this.inputHandler.currentInput(dt);
-    }
+    if (!this.player.active) return;
 
-    // if (this.player !== undefined && input !== null) {
-    //   const command = this.inputHandler.handleInput(input);
-    //   command && command(this.player);
-    // }
+    const input = this.inputController.currentInput(dt);
 
     if (input != null) {
+      // if (this.player !== undefined) {
+      //   this.inputHandler.handleInput(input, this.player);
+      // }
+
       const lastInput = this.inputBuffer.peekRear();
       const uinput: unprocessedInput = {
         seq: (lastInput?.seq ?? 0) + 1,
@@ -222,8 +221,7 @@ export class Game {
         }
 
         for (const input of this.inputBuffer) {
-          const command = this.inputHandler.handleInput(input.input);
-          command && command(this.player);
+          this.inputController.handleInput(input.input, this.player);
         }
 
         // if (processingInput) {
