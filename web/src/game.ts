@@ -62,7 +62,7 @@ export class Game {
 
   updateInterval: number;
 
-  canvas = document.createElement("canvas");
+  canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
   ctx = this.canvas.getContext("2d");
 
   onInput: (input: unprocessedInput) => void;
@@ -77,8 +77,6 @@ export class Game {
     this.hud.updateResolution(width, height);
 
     this.board = new Board(0, this.inputHandler);
-
-    this.populateDOM();
 
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
@@ -213,15 +211,6 @@ export class Game {
     } else {
       this.board.updateGrid(data.board.grid);
     }
-  }
-
-  private populateDOM() {
-    const wrapper = document.createElement("div");
-    wrapper.style.width = "fit-content";
-    wrapper.style.margin = "auto";
-    wrapper.appendChild(this.canvas);
-    this.htmlElement.replaceChildren(wrapper);
-    this.htmlElement.appendChild(this.fps);
   }
 
   private update() {

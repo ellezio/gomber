@@ -6,7 +6,7 @@ import { LobbyItem, LobbyList } from "./lobbyList";
 const loginView = document.getElementById("login-view");
 const lobbyListView = document.getElementById("lobby-list-view");
 const lobbyView = document.getElementById("lobby-view");
-const mainView = document.getElementById("main-view");
+const gameView = document.getElementById("game-view");
 const allViews = document.querySelectorAll(".view");
 
 const snackbarElement = document.getElementById("snackbar-block");
@@ -198,7 +198,7 @@ class Client {
   createGame(): Game {
     const game = new Game();
     game.updateClients(this.lobby.state.clients);
-    game.htmlElement = mainView;
+    game.htmlElement = gameView;
     game.onInput = (inp) => {
       this.sendClientInput({
         id: inp.seq,
@@ -280,7 +280,7 @@ class Client {
 
   showGame() {
     this.state = ClientState.InGame;
-    this.showView(mainView);
+    this.showView(gameView);
   }
 
   showView(elm: HTMLElement) {
@@ -302,9 +302,9 @@ function testShowGame() {
 }
 
 window.onload = async function () {
-  // const client = new Client();
-  // client.connect();
-  // client.showLoginPage();
+  const client = new Client();
+  client.connect();
+  client.showLoginPage();
 
-  testShowGame();
+  // testShowGame();
 };
