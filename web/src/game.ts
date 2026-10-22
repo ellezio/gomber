@@ -89,9 +89,99 @@ export class Game {
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
     this.updateInterval = window.setInterval(
-      () => this.update(),
+      this.gameLoop.bind(this),
       1000 / this.updateRate,
     );
+  }
+
+  private gameLoop() {
+    const dt = this.calcDeltatime();
+    this.updateFPS(dt);
+    this.handleInput(dt);
+    this.update(dt);
+    this.render();
+  }
+
+  private calcDeltatime(): number {
+    const nowTs = performance.now();
+    const lastTs = this.lastTs || nowTs;
+    const dt = (nowTs - lastTs) / 1000;
+    this.lastTs = nowTs;
+    return dt;
+  }
+
+  private updateFPS(dt: number) {
+    this.dtSum += dt;
+    if (this.dtSum >= 1) {
+      this.fps.innerHTML = this.fc + " fps";
+      this.dtSum = 0;
+      this.fc = 0;
+    } else {
+      this.fc++;
+    }
+  }
+
+  private handleInput(dt: number) {
+    let input: { actions: Action[]; dt: number } | null = null;
+    if (this.player.active) {
+      input = this.inputHandler.currentInput(dt);
+    }
+
+    // if (this.player !== undefined && input !== null) {
+    //   const command = this.inputHandler.handleInput(input);
+    //   command && command(this.player);
+    // }
+
+    if (input != null) {
+      const lastInput = this.inputBuffer.peekRear();
+      const uinput: unprocessedInput = {
+        seq: (lastInput?.seq ?? 0) + 1,
+        input,
+      };
+      this.inputBuffer.push(uinput);
+
+      this.onInput(uinput);
+    }
+  }
+
+  private update(dt: number) {
+    this.explosions.forEach((e) => e.update(dt));
+
+    this.hud.updatePlayerStats({
+      hp: this.player.hp,
+      bombsCount: this.player.availableBombs,
+    });
+  }
+
+  private render() {
+    this.clear();
+
+    const offX = Math.round(this.canvas.width / 2 - this.board.width / 2);
+    const offY = Math.round(this.canvas.height / 2 - this.board.height / 2);
+
+    this.ctx.translate(offX, offY);
+
+    this.board.render(this.ctx);
+
+    for (const entity of this.entities) {
+      // if (this.player?.collision.check(entity)) {
+      //   entity.color = "green";
+      // } else {
+      //   entity.color = "blue";
+      // }
+
+      entity.render(this.ctx, SCALE);
+    }
+
+    this.bombs.forEach((b) => b.render(this.ctx, SCALE));
+    this.explosions.forEach((e) => e.render(this.ctx, SCALE));
+    this.powerups.forEach((e) => e.render(this.ctx, SCALE));
+    this.player?.render(this.ctx, SCALE);
+
+    this.explosions = this.explosions.filter((ent) => ent.active);
+
+    this.ctx.translate(-offX, -offY);
+    this.hud.render(this.ctx);
   }
 
   public updateClients(clients: clients) {
@@ -132,7 +222,6 @@ export class Game {
         }
 
         for (const input of this.inputBuffer) {
-          if (!input) break;
           const command = this.inputHandler.handleInput(input.input);
           command && command(this.player);
         }
@@ -218,78 +307,6 @@ export class Game {
       this.board.setGrid(data.board.grid);
     } else {
       this.board.updateGrid(data.board.grid);
-    }
-  }
-
-  private update() {
-    this.clear();
-
-    const nowTs = performance.now();
-    const lastTs = this.lastTs || nowTs;
-    const dt = (nowTs - lastTs) / 1000;
-    this.lastTs = nowTs;
-
-    this.dtSum += dt;
-    if (this.dtSum >= 1) {
-      this.fps.innerHTML = this.fc + " fps";
-      this.dtSum = 0;
-      this.fc = 0;
-    } else {
-      this.fc++;
-    }
-
-    let input: { actions: Action[]; dt: number } | null = null;
-    if (this.player.active) {
-      input = this.inputHandler.currentInput(dt);
-    }
-
-    const offX = Math.round(this.canvas.width / 2 - this.board.width / 2);
-    const offY = Math.round(this.canvas.height / 2 - this.board.height / 2);
-
-    this.ctx.translate(offX, offY);
-
-    // if (this.player !== undefined && input !== null) {
-    //   const command = this.inputHandler.handleInput(input);
-    //   command && command(this.player);
-    // }
-
-    this.explosions.forEach((e) => e.update(dt));
-
-    this.board.render(this.ctx);
-
-    for (const entity of this.entities) {
-      // if (this.player?.collision.check(entity)) {
-      //   entity.color = "green";
-      // } else {
-      //   entity.color = "blue";
-      // }
-
-      entity.render(this.ctx, SCALE);
-    }
-
-    this.bombs.forEach((b) => b.render(this.ctx, SCALE));
-    this.explosions.forEach((e) => e.render(this.ctx, SCALE));
-    this.powerups.forEach((e) => e.render(this.ctx, SCALE));
-    this.player?.render(this.ctx, SCALE);
-
-    this.explosions = this.explosions.filter((ent) => ent.active);
-
-    this.ctx.translate(-offX, -offY);
-    this.hud.updatePlayerStats({
-      hp: this.player.hp,
-      bombsCount: this.player.availableBombs,
-    });
-    this.hud.render(this.ctx);
-
-    if (input != null) {
-      const lastInput = this.inputBuffer.peekRear();
-      const uinput: unprocessedInput = {
-        seq: (lastInput?.seq ?? 0) + 1,
-        input,
-      };
-      this.inputBuffer.push(uinput);
-
-      this.onInput(uinput);
     }
   }
 
