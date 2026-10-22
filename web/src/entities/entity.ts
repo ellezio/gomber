@@ -12,17 +12,12 @@ export class Entity {
     public active: boolean,
   ) {}
 
-  update(
-    ctx: CanvasRenderingContext2D,
-    offset: number,
-    scale: number,
-    _dt: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, scale: number) {
     if (!this.active) return;
 
     ctx.fillStyle = this.color;
     ctx.fillRect(
-      this.position.x * scale + offset,
+      this.position.x * scale,
       this.position.y * scale,
       this.size.width * scale,
       this.size.height * scale,

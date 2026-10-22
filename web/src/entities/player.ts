@@ -56,13 +56,8 @@ export class Player extends Entity {
     this.name = playerMsg.name;
   }
 
-  update(
-    ctx: CanvasRenderingContext2D,
-    offset: number,
-    scale: number,
-    dt: number,
-  ): void {
-    super.update(ctx, offset, scale, dt);
+  render(ctx: CanvasRenderingContext2D, scale: number): void {
+    super.render(ctx, scale);
 
     if (!this.active) return;
 
@@ -72,7 +67,7 @@ export class Player extends Entity {
     ctx.textBaseline = "bottom";
     ctx.fillText(
       this.name,
-      this.size.width / 2 + this.position.x * scale + offset,
+      this.size.width / 2 + this.position.x * scale,
       this.position.y * scale,
     );
   }

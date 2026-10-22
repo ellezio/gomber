@@ -1,4 +1,4 @@
-import { Board, TileType } from "./board";
+import { GameMap, TileType } from "./gameMap";
 import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
 import { Entity } from "./entities/entity";
@@ -7,6 +7,8 @@ import { Player } from "./entities/player";
 import { HUD } from "./hud";
 import { Action, InputHandler, unprocessedInput } from "./input";
 import { clients } from "./lobby";
+
+const SCALE = 1;
 
 type entityInMsg = {
   id: number;
@@ -46,9 +48,15 @@ export class Game {
 
   hud = new HUD();
 
-  board: Board;
+  board: GameMap;
   inputHandler = new InputHandler();
   clients: clients;
+
+  player: Player;
+  entities: Entity[] = [];
+  bombs: Bomb[] = [];
+  explosions: Explosion[] = [];
+  powerups: Entity[] = [];
 
   fps = document.createElement("div");
   fc = 0;
@@ -76,7 +84,7 @@ export class Game {
 
     this.hud.updateResolution(width, height);
 
-    this.board = new Board(0, this.inputHandler);
+    this.board = new GameMap();
 
     window.onkeyup = window.onkeydown = this.inputHandler.handleKeyboardEvent;
 
@@ -100,20 +108,20 @@ export class Game {
   public handleMessage(data: boardUpdateMessage) {
     for (const player of data.board.players) {
       if (player.id === data.controlledEntityId) {
-        if (this.board.player === undefined) {
-          this.board.player = Player.fromMessage(player);
+        if (this.player === undefined) {
+          this.player = Player.fromMessage(player);
           this.hud.updatePlayerStats({
-            hp: this.board.player.hp,
-            bombsCount: this.board.player.availableBombs,
+            hp: this.player.hp,
+            bombsCount: this.player.availableBombs,
           });
         }
 
         if (data.processedInput === null) {
-          this.board.player.updateStatsFromMessage(player);
+          this.player.updateStatsFromMessage(player);
           continue;
         }
 
-        this.board.player.updateFromMessage(player);
+        this.player.updateFromMessage(player);
         let processingInput = this.inputBuffer.pop();
 
         while (
@@ -126,7 +134,7 @@ export class Game {
         for (const input of this.inputBuffer) {
           if (!input) break;
           const command = this.inputHandler.handleInput(input.input);
-          command && command(this.board.player);
+          command && command(this.player);
         }
 
         // if (processingInput) {
@@ -166,11 +174,11 @@ export class Game {
       }
     }
 
-    this.board.entities = data.board.players
+    this.entities = data.board.players
       .filter((p) => p.id !== data.controlledEntityId)
       .map((p) => Player.fromMessage(p));
 
-    this.board.bombs =
+    this.bombs =
       data.board.bombs?.map((b) => {
         const bomb = new Bomb(
           b.id,
@@ -184,7 +192,7 @@ export class Game {
       }) ?? [];
 
     data.board.explosions?.forEach((e) => {
-      this.board.explosions.push(
+      this.explosions.push(
         new Explosion(
           e.id,
           e.pos,
@@ -195,7 +203,7 @@ export class Game {
       );
     });
 
-    this.board.powerups =
+    this.powerups =
       data.board.powerups?.map((e) => {
         return new Entity(
           e.id,
@@ -231,7 +239,7 @@ export class Game {
     }
 
     let input: { actions: Action[]; dt: number } | null = null;
-    if (this.board.player.active) {
+    if (this.player.active) {
       input = this.inputHandler.currentInput(dt);
     }
 
@@ -239,11 +247,37 @@ export class Game {
     const offY = Math.round(this.canvas.height / 2 - this.board.height / 2);
 
     this.ctx.translate(offX, offY);
-    this.board.update(this.ctx, input, dt);
+
+    // if (this.player !== undefined && input !== null) {
+    //   const command = this.inputHandler.handleInput(input);
+    //   command && command(this.player);
+    // }
+
+    this.explosions.forEach((e) => e.update(dt));
+
+    this.board.render(this.ctx);
+
+    for (const entity of this.entities) {
+      // if (this.player?.collision.check(entity)) {
+      //   entity.color = "green";
+      // } else {
+      //   entity.color = "blue";
+      // }
+
+      entity.render(this.ctx, SCALE);
+    }
+
+    this.bombs.forEach((b) => b.render(this.ctx, SCALE));
+    this.explosions.forEach((e) => e.render(this.ctx, SCALE));
+    this.powerups.forEach((e) => e.render(this.ctx, SCALE));
+    this.player?.render(this.ctx, SCALE);
+
+    this.explosions = this.explosions.filter((ent) => ent.active);
+
     this.ctx.translate(-offX, -offY);
     this.hud.updatePlayerStats({
-      hp: this.board.player.hp,
-      bombsCount: this.board.player.availableBombs,
+      hp: this.player.hp,
+      bombsCount: this.player.availableBombs,
     });
     this.hud.render(this.ctx);
 
