@@ -218,6 +218,10 @@ export class Game {
   }
 
   public handleMessage(data: boardUpdateMessage) {
+    this.players = this.players.filter((p) =>
+      data.board.players.find((bp) => p.id == bp.id),
+    );
+
     for (const player of data.board.players) {
       if (player.id == data.controlledEntityId) continue;
 
