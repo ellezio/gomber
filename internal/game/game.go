@@ -175,11 +175,12 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 
 func (g *Game) handleInput(dt float32) {
 	for _, client := range g.clients {
+		client.controlledEntity.Velocity = *math2.NewVector2(0, 0)
 		input := client.inputs.Pop()
 		for ; input != nil; input = client.inputs.Pop() {
 			if commands := g.inputHandler.HandleInput(input); commands != nil {
 				for _, command := range commands {
-					command(client.controlledEntity, dt)
+					command(client.controlledEntity, min(dt, input.Dt))
 				}
 			}
 

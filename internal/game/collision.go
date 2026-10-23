@@ -50,13 +50,13 @@ func RayVsBox2(ray math2.Ray, box math2.Box2) (contactPoint *math2.Vector2, cont
 	contactPoint = ray.Origin.AddVector2(ray.Direction.Mul(contactTime))
 
 	contactNormal = math2.NewZeroVector2()
-	if near.X > near.Y {
+	if near.X >= near.Y {
 		if ray.Direction.X < 0 {
 			contactNormal.X = 1
 		} else {
 			contactNormal.X = -1
 		}
-	} else if near.Y > near.X {
+	} else if near.Y >= near.X {
 		if ray.Direction.Y < 0 {
 			contactNormal.Y = 1
 		} else {

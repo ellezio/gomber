@@ -7,6 +7,7 @@ import { Player } from "./entities/player";
 import { HUD } from "./hud";
 import {
   Action,
+  input,
   InputController,
   RemotePlayerController,
   unprocessedInput,
@@ -67,6 +68,10 @@ export class Game {
   fc = 0;
   dtSum = 0;
   explosionDtSum = 0;
+
+  networkTickTime = 1 / 30;
+  networkTickAccTime = 0;
+  networkInput = { actions: [], dt: 0 } as input;
 
   updateRate = 60;
   lastTs: number;
@@ -138,10 +143,26 @@ export class Game {
         checkPlayerCollision(this.player, this.gameMap, this.bombs);
       }
 
-      const lastInput = this.inputBuffer.peekRear();
-      const uinput: unprocessedInput = {
+      this.networkInput.dt += dt;
+      for (const action of input?.actions ?? []) {
+        if (!this.networkInput.actions.find((nia) => nia == action)) {
+          this.networkInput.actions.push(action);
+        }
+      }
+    }
+
+    this.networkTickAccTime += dt;
+    if (this.networkTickAccTime >= this.networkTickTime) {
+      this.networkTickAccTime -= this.networkTickTime;
+      const netInput = structuredClone(this.networkInput);
+      if (input) netInput.dt = netInput.dt - this.networkTickAccTime;
+      this.networkInput.dt = this.networkTickAccTime;
+      this.networkInput.actions = input?.actions ?? [];
+
+      let lastInput = this.inputBuffer.peekRear();
+      let uinput: unprocessedInput = {
         seq: (lastInput?.seq ?? 0) + 1,
-        input,
+        input: netInput,
       };
       this.inputBuffer.push(uinput);
 
@@ -267,7 +288,7 @@ export class Game {
 
         this.player.updateFromMessage(player);
         // there is no need for interpolating current player because it's movement is predicted
-        this.player.position = this.player.serverPosition;
+        this.player.position = { ...this.player.serverPosition };
 
         let processingInput = this.inputBuffer.pop();
 
@@ -280,6 +301,11 @@ export class Game {
 
         for (const input of this.inputBuffer) {
           this.inputController.handleInput(input.input, this.player);
+          checkPlayerCollision(this.player, this.gameMap, this.bombs);
+        }
+
+        if (this.networkInput.actions.length > 0) {
+          this.inputController.handleInput(this.networkInput, this.player);
           checkPlayerCollision(this.player, this.gameMap, this.bombs);
         }
       }

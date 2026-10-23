@@ -37,9 +37,9 @@ function sweepPlayer(
   if (time >= 1 || time <= 0) return null;
 
   const normal = { x: 0, y: 0 };
-  if (nearX > nearY) {
+  if (nearX >= nearY) {
     normal.x = velocity.x < 0 ? 1 : -1;
-  } else if (nearY > nearX) {
+  } else if (nearY >= nearX) {
     normal.y = velocity.y < 0 ? 1 : -1;
   }
 

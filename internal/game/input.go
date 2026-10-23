@@ -55,10 +55,10 @@ func (i *InputList) Pop() *Input {
 }
 
 type Input struct {
-	Id        int      `json:"id"`
-	Actions   []action `json:"actions"`
-	DeltaTime float32  `json:"dt"`
-	next      *Input
+	Id      int      `json:"id"`
+	Actions []action `json:"actions"`
+	Dt      float32  `json:"dt"`
+	next    *Input
 }
 
 func (i *Input) hasAction(action action) bool {
@@ -119,7 +119,7 @@ func (h *InputHandler) HandleInput(input *Input) []Command {
 
 func move(direction math2.Vector2) Command {
 	return func(p *Player, dt float32) {
-		p.Velocity = *direction.Mul(p.Speed * dt)
+		p.Velocity.AddVector2(direction.Mul(p.Speed * dt))
 	}
 }
 
