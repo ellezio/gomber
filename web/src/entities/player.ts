@@ -13,6 +13,7 @@ export class Player extends Entity {
     public maxBombs: number,
     public availableBombs: number,
     public hp: number,
+    public serverPosition: position,
   ) {
     super(id, position, size, color, active);
     this.prevPosition = position;
@@ -26,8 +27,8 @@ export class Player extends Entity {
         y: playerMsg.pos.y + playerMsg.aabb.min.y,
       },
       {
-        width: playerMsg.aabb.max.x - playerMsg.aabb.min.x + 1,
-        height: playerMsg.aabb.max.y - playerMsg.aabb.min.y + 1,
+        width: playerMsg.aabb.max.x - playerMsg.aabb.min.x,
+        height: playerMsg.aabb.max.y - playerMsg.aabb.min.y,
       },
       "green",
       playerMsg.active,
@@ -36,12 +37,16 @@ export class Player extends Entity {
       playerMsg.maxBombs,
       playerMsg.availableBombs,
       playerMsg.hp,
+      {
+        x: playerMsg.pos.x + playerMsg.aabb.min.x,
+        y: playerMsg.pos.y + playerMsg.aabb.min.y,
+      },
     );
   }
 
   updateFromMessage(playerMsg: playerInMsg) {
-    this.position.x = playerMsg.pos.x;
-    this.position.y = playerMsg.pos.y;
+    this.serverPosition.x = playerMsg.pos.x;
+    this.serverPosition.y = playerMsg.pos.y;
     this.size.width = playerMsg.aabb.max.x;
     this.size.height = playerMsg.aabb.max.y;
     this.updateStatsFromMessage(playerMsg);

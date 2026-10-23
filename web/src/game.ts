@@ -5,7 +5,12 @@ import { Entity } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { HUD } from "./hud";
-import { Action, InputController, unprocessedInput } from "./input";
+import {
+  Action,
+  InputController,
+  RemotePlayerController,
+  unprocessedInput,
+} from "./input";
 import { clients } from "./lobby";
 import { checkPlayerCollision } from "./collision";
 
@@ -49,6 +54,7 @@ export class Game {
 
   gameMap: GameMap;
   inputController = new InputController();
+  remoteController = new RemotePlayerController();
   clients: clients;
 
   player: Player;
@@ -144,6 +150,8 @@ export class Game {
   }
 
   private update(dt: number) {
+    this.players.forEach((p) => this.remoteController.update(p, dt));
+
     this.explosions.forEach((e) => e.update(dt));
 
     this.hud.updatePlayerStats({
@@ -189,9 +197,16 @@ export class Game {
   }
 
   public handleMessage(data: boardUpdateMessage) {
-    this.players = data.board.players
-      .filter((p) => p.id !== data.controlledEntityId)
-      .map((p) => Player.fromMessage(p));
+    for (const player of data.board.players) {
+      if (player.id == data.controlledEntityId) continue;
+
+      const existingPlayer = this.players.find((p) => p.id == player.id);
+      if (existingPlayer) {
+        existingPlayer.updateFromMessage(player);
+      } else {
+        this.players.push(Player.fromMessage(player));
+      }
+    }
 
     this.bombs =
       data.board.bombs?.map((b) => {
@@ -251,6 +266,9 @@ export class Game {
         }
 
         this.player.updateFromMessage(player);
+        // there is no need for interpolating current player because it's movement is predicted
+        this.player.position = this.player.serverPosition;
+
         let processingInput = this.inputBuffer.pop();
 
         while (
