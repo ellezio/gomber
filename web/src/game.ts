@@ -74,6 +74,9 @@ export class Game {
   networkInput = { actions: [], dt: 0 } as input;
   networkInputLastSeqNum = 0;
 
+  // round up for accepting floating number inaccuracy
+  serverSimDT = Math.ceil(1 / 60);
+
   updateRate = 60;
   lastTs: number;
 
@@ -146,7 +149,7 @@ export class Game {
 
       this.networkInput.dt += dt;
       for (const action of input?.actions ?? []) {
-        if (!this.networkInput.actions.find((nia) => nia == action)) {
+        if (!this.networkInput.actions.includes(action)) {
           this.networkInput.actions.push(action);
         }
       }
@@ -154,20 +157,40 @@ export class Game {
 
     this.networkTickAccTime += dt;
     if (this.networkTickAccTime >= this.networkTickTime) {
-      this.networkTickAccTime -= this.networkTickTime;
+      while (this.networkTickAccTime >= this.networkTickTime) {
+        this.networkTickAccTime -= this.networkTickTime;
+      }
+
       const netInput = structuredClone(this.networkInput);
-      if (input) netInput.dt = netInput.dt - this.networkTickAccTime;
-      this.networkInput.dt = this.networkTickAccTime;
-      this.networkInput.actions = input?.actions ?? [];
+      if (input) {
+        // Note:
+        // This needs change because it extends current input for next frame
+        // additionally by the time of next input. I am thinking about some
+        // compound input that will be send with same input seq as next one
+        // and on server will be processed as separately within same simulation
+        // tick. I am not sure what to do right now I have to look into it and
+        // see how game engines solve similar problems.
+        netInput.dt -= this.networkTickAccTime;
+        this.networkInput.dt = this.networkTickAccTime;
+        this.networkInput.actions = [...input.actions];
+      } else {
+        this.networkInput = { dt: 0, actions: [] };
+      }
 
-      this.networkInputLastSeqNum += 1;
-      let uinput: unprocessedInput = {
-        seq: this.networkInputLastSeqNum,
-        input: netInput,
-      };
-      this.inputBuffer.push(uinput);
+      while (netInput.dt > 0.000001) {
+        this.networkInputLastSeqNum += 1;
+        let uinput: unprocessedInput = {
+          seq: this.networkInputLastSeqNum,
+          input: structuredClone(netInput),
+        };
 
-      this.onInput(uinput);
+        uinput.input.dt = Math.min(netInput.dt, this.serverSimDT);
+        netInput.dt -= this.serverSimDT;
+
+        this.inputBuffer.push(uinput);
+
+        this.onInput(uinput);
+      }
     }
   }
 

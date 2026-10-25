@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"slices"
 	"time"
@@ -445,6 +446,13 @@ func (g *Game) handleGameMessage(event GameMessage) {
 		g.removeClient(details.Id)
 
 	case ClientInputEvent:
+		// discard user input that validates server simulation time
+		// if it's longer client should split messages.
+		// The rounding up is for precition error of floating point
+		if details.Input.Dt > float32(math.Ceil(1.0/updatesRate)) {
+			return
+		}
+
 		if g.clients[details.Id].controlledEntity.Active {
 			g.clients[details.Id].inputs.Append(&details.Input)
 		}
