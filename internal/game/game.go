@@ -55,10 +55,11 @@ type GameClient struct {
 	notifier         ClientNotifier
 
 	// queue for input yet to be processed
-	inputs InputList
+	inputs *InputList
 	// input that was just processed which will be sent to client
 	// in order to inform about which input was involved into generating new state of game
-	processedInput *Input
+	processedInput        *Input
+	lastProcessedInputSeq int
 }
 
 type ClientConnectedEvent struct {
@@ -188,6 +189,11 @@ func (g *Game) handleInput(dt float32) {
 		if input == nil {
 			return
 		}
+
+		if input.Id <= client.lastProcessedInputSeq {
+			return
+		}
+
 		if commands := g.inputHandler.HandleInput(input); commands != nil {
 			for _, command := range commands {
 				command(client.controlledEntity, min(dt, input.Dt))
@@ -195,6 +201,7 @@ func (g *Game) handleInput(dt float32) {
 		}
 
 		client.processedInput = input
+		client.lastProcessedInputSeq = input.Id
 	}
 }
 
@@ -439,7 +446,7 @@ func (g *Game) handleGameMessage(event GameMessage) {
 
 	case ClientInputEvent:
 		if g.clients[details.Id].controlledEntity.Active {
-			g.clients[details.Id].inputs.Append(details.Input)
+			g.clients[details.Id].inputs.Append(&details.Input)
 		}
 	}
 }
@@ -471,6 +478,9 @@ func (g *Game) addClient(details ClientConnectedEvent) {
 		isDisconnected:   false,
 		notifier:         details.Notifier,
 		controlledEntity: player,
+
+		// maximal input buffering will be of 1 second
+		inputs: NewInputList(updatesRate),
 	}
 }
 

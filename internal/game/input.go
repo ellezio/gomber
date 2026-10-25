@@ -26,31 +26,43 @@ const (
 )
 
 type InputList struct {
-	head *Input
-	tail *Input
+	buf              []*Input
+	front, rear, cap int
 }
 
-func (i *InputList) Append(inp Input) {
-	if i.head == nil {
-		i.head = &inp
-	} else {
-		i.tail.next = &inp
+func NewInputList(capacity int) *InputList {
+	capacity += 1
+	return &InputList{
+		buf: make([]*Input, capacity),
+		cap: capacity,
+	}
+}
+
+func (i *InputList) IsEmpty() bool {
+	return i.front == i.rear
+}
+
+func (i *InputList) IsFull() bool {
+	return (i.rear+1)%i.cap == i.front
+}
+
+func (i *InputList) Append(inp *Input) {
+	if i.IsFull() {
+		return
 	}
 
-	i.tail = &inp
+	i.buf[i.rear] = inp
+	i.rear = (i.rear + 1) % i.cap
 }
 
 func (i *InputList) Pop() *Input {
-	if i.head == nil {
+	if i.IsEmpty() {
 		return nil
 	}
 
-	inp := i.head
-	i.head = inp.next
-	if inp.next == nil {
-		i.tail = nil
-	}
-	inp.next = nil
+	inp := i.buf[i.front]
+	i.buf[i.front] = nil
+	i.front = (i.front + 1) % i.cap
 	return inp
 }
 

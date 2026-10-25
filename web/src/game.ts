@@ -72,6 +72,7 @@ export class Game {
   networkTickTime = 1 / 60;
   networkTickAccTime = 0;
   networkInput = { actions: [], dt: 0 } as input;
+  networkInputLastSeqNum = 0;
 
   updateRate = 60;
   lastTs: number;
@@ -159,9 +160,9 @@ export class Game {
       this.networkInput.dt = this.networkTickAccTime;
       this.networkInput.actions = input?.actions ?? [];
 
-      let lastInput = this.inputBuffer.peekRear();
+      this.networkInputLastSeqNum += 1;
       let uinput: unprocessedInput = {
-        seq: (lastInput?.seq ?? 0) + 1,
+        seq: this.networkInputLastSeqNum,
         input: netInput,
       };
       this.inputBuffer.push(uinput);
