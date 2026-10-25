@@ -69,7 +69,7 @@ export class Game {
   dtSum = 0;
   explosionDtSum = 0;
 
-  networkTickTime = 1 / 30;
+  networkTickTime = 1 / 60;
   networkTickAccTime = 0;
   networkInput = { actions: [], dt: 0 } as input;
 

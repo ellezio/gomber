@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	updatesRate int = 30
+	updatesRate = 60
 
 	TileSize = 50
 )
@@ -134,7 +134,10 @@ func (g *Game) GetMessageChannel() chan<- GameMessage {
 func (g *Game) Run(gameMap *GameMap) GameResult {
 	g.LoadMap(gameMap)
 
-	ticker := time.NewTicker(time.Second / time.Duration(updatesRate))
+	accumulator := 0.0
+	dt := 1.0 / updatesRate
+
+	ticker := time.NewTicker(time.Second / updatesRate)
 	lastTs := time.Now()
 	for !g.over {
 		select {
@@ -142,23 +145,28 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 			g.handleGameMessage(msg)
 		case <-ticker.C:
 			nowTs := time.Now()
-			tempTs := lastTs
+			simTime := nowTs.Sub(lastTs)
 			lastTs = nowTs
-			dt := nowTs.Sub(tempTs).Seconds()
 
-			g.handleInput(float32(dt))
-			g.removeEntities()
-			g.checkCollision()
-			g.update(float32(dt))
+			accumulator += simTime.Seconds()
 
-			for _, client := range g.clients {
-				client.notifier.OnNewGameState(ClientGameState{
-					ControlledEntityId: client.controlledEntity.Id,
-					GameState:          g.GameState,
-					ProcessedInput:     client.processedInput,
-				})
+			for accumulator >= dt {
+				g.handleInput(float32(dt))
+				g.removeEntities()
+				g.checkCollision()
+				g.update(float32(dt))
 
-				client.processedInput = nil
+				for _, client := range g.clients {
+					client.notifier.OnNewGameState(ClientGameState{
+						ControlledEntityId: client.controlledEntity.Id,
+						GameState:          g.GameState,
+						ProcessedInput:     client.processedInput,
+					})
+
+					client.processedInput = nil
+				}
+
+				accumulator -= dt
 			}
 		}
 	}
@@ -177,15 +185,16 @@ func (g *Game) handleInput(dt float32) {
 	for _, client := range g.clients {
 		client.controlledEntity.Velocity = *math2.NewVector2(0, 0)
 		input := client.inputs.Pop()
-		for ; input != nil; input = client.inputs.Pop() {
-			if commands := g.inputHandler.HandleInput(input); commands != nil {
-				for _, command := range commands {
-					command(client.controlledEntity, min(dt, input.Dt))
-				}
-			}
-
-			client.processedInput = input
+		if input == nil {
+			return
 		}
+		if commands := g.inputHandler.HandleInput(input); commands != nil {
+			for _, command := range commands {
+				command(client.controlledEntity, min(dt, input.Dt))
+			}
+		}
+
+		client.processedInput = input
 	}
 }
 
