@@ -13,7 +13,7 @@ import {
   unprocessedInput,
 } from "./input";
 import { clients } from "./lobby";
-import { checkPlayerCollision } from "./collision";
+import { entityVsEntities, checkPlayerCollision } from "./collision";
 
 type entityInMsg = {
   id: number;
@@ -198,6 +198,8 @@ export class Game {
     this.players.forEach((p) => this.remoteController.update(p, dt));
     this.bombs.forEach((b) => b.update(dt));
     this.explosions.forEach((e) => e.update(dt));
+
+    this.bombs.forEach((b) => entityVsEntities(b, this.explosions));
 
     this.bombs = this.bombs.filter((b) => b.active);
     this.explosions = this.explosions.filter((e) => e.active);

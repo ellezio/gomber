@@ -26,4 +26,6 @@ export class Entity {
       this.size.height * scale,
     );
   }
+
+  onCollision(_collider: Entity) {}
 }

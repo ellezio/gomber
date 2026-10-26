@@ -7,6 +7,25 @@ const COLLISION_MARGIN = 0.1;
 type Obstacle = Pick<Entity, "position" | "size">;
 type Contact = { time: number; normal: position };
 
+export function entityVsEntities(entity: Entity, colliders: Entity[]): void {
+  if (!entity.active) return;
+
+  for (const collider of colliders) {
+    if (!collider.active) continue;
+
+    if (
+      !(
+        entity.position.x >= collider.position.x + collider.size.width ||
+        entity.position.x + entity.size.width <= collider.position.x ||
+        entity.position.y >= collider.position.y + collider.size.height ||
+        entity.position.y + entity.size.height <= collider.position.y
+      )
+    ) {
+      entity.onCollision(collider);
+    }
+  }
+}
+
 function sweepPlayer(
   player: Player,
   velocity: position,

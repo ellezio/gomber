@@ -4,8 +4,9 @@ import { Explosion } from "./explosion";
 
 export class Bomb extends Entity {
   countDown: number;
-  countAcc = 0;
   explosionRange: number;
+  private countAcc = 0;
+  private toExplode = false;
 
   render(ctx: CanvasRenderingContext2D, scale: number) {
     if (!this.active) return;
@@ -40,8 +41,16 @@ export class Bomb extends Entity {
       this.countDown -= elapsed;
     }
 
-    if (this.countDown <= 0) {
+    if (this.countDown <= 0 || this.toExplode) {
       this.explode();
+    }
+  }
+
+  onCollision(collider: Entity) {
+    if (!this.active) return;
+
+    if (collider instanceof Explosion) {
+      this.toExplode = true;
     }
   }
 
