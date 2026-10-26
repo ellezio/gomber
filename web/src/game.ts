@@ -32,6 +32,7 @@ export type playerInMsg = entityInMsg & {
 
 type bombInMsg = entityInMsg & {
   cd: number;
+  er: number;
 };
 
 type powerUpInMsg = entityInMsg;
@@ -43,7 +44,6 @@ export type boardUpdateMessage = {
     grid: TileType[][];
     players: playerInMsg[];
     bombs: bombInMsg[];
-    explosions: entityInMsg[];
     powerups: powerUpInMsg[];
   };
 };
@@ -196,8 +196,11 @@ export class Game {
 
   private update(dt: number) {
     this.players.forEach((p) => this.remoteController.update(p, dt));
-
+    this.bombs.forEach((b) => b.update(dt));
     this.explosions.forEach((e) => e.update(dt));
+
+    this.bombs = this.bombs.filter((b) => b.active);
+    this.explosions = this.explosions.filter((e) => e.active);
 
     this.hud.updatePlayerStats({
       hp: this.player.hp,
@@ -223,8 +226,6 @@ export class Game {
     this.explosions.forEach((e) => e.render(this.ctx, SCALE));
     this.powerups.forEach((e) => e.render(this.ctx, SCALE));
     this.player?.render(this.ctx, SCALE);
-
-    this.explosions = this.explosions.filter((ent) => ent.active);
 
     this.ctx.translate(-offX, -offY);
     this.hud.render(this.ctx);
@@ -257,34 +258,27 @@ export class Game {
       }
     }
 
-    this.bombs =
-      data.board.bombs?.map((b) => {
-        const bomb = new Bomb(
-          b.id,
-          b.pos,
-          { width: b.aabb.max.x, height: b.aabb.max.y },
+    for (const bomb of data.board.bombs ?? []) {
+      const exists = this.bombs.find((b) => b.id == bomb.id);
+      if (!exists) {
+        const newBomb = new Bomb(
+          this,
+          bomb.id,
+          bomb.pos,
+          { width: bomb.aabb.max.x, height: bomb.aabb.max.y },
           "white",
-          b.active,
+          bomb.active,
         );
-        bomb.countDown = b.cd;
-        return bomb;
-      }) ?? [];
-
-    data.board.explosions?.forEach((e) => {
-      this.explosions.push(
-        new Explosion(
-          e.id,
-          e.pos,
-          { width: e.aabb.max.x, height: e.aabb.max.y },
-          "yellow",
-          e.active,
-        ),
-      );
-    });
+        newBomb.countDown = bomb.cd;
+        newBomb.explosionRange = bomb.er;
+        this.bombs.push(newBomb);
+      }
+    }
 
     this.powerups =
       data.board.powerups?.map((e) => {
         return new Entity(
+          this,
           e.id,
           e.pos,
           { width: e.aabb.max.x, height: e.aabb.max.y },
@@ -337,6 +331,12 @@ export class Game {
           checkPlayerCollision(this.player, this.gameMap, this.bombs);
         }
       }
+    }
+  }
+
+  instantiate(entity: Entity) {
+    if (entity instanceof Explosion) {
+      this.explosions.push(entity);
     }
   }
 

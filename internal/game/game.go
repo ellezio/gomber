@@ -83,10 +83,10 @@ type ClientInputEvent struct {
 type GameState struct {
 	BoardGrid [][]TileType `json:"grid"`
 
-	Players    []*Player    `json:"players"`
-	Bombs      []*Bomb      `json:"bombs"`
-	Explosions []*Explosion `json:"explosions"`
-	PowerUps   []*PowerUp   `json:"powerups"`
+	Players    []*Player `json:"players"`
+	Bombs      []*Bomb   `json:"bombs"`
+	Explosions []*Explosion
+	PowerUps   []*PowerUp `json:"powerups"`
 
 	bombGrid [][]int
 }

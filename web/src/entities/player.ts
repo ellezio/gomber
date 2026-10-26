@@ -15,7 +15,7 @@ export class Player extends Entity {
     public hp: number,
     public serverPosition: position,
   ) {
-    super(id, position, size, color, active);
+    super(null, id, position, size, color, active);
     this.prevPosition = position;
   }
 

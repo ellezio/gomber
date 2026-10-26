@@ -1,3 +1,5 @@
+import { Game } from "../game";
+
 export type position = { x: number; y: number };
 export type size = { width: number; height: number };
 
@@ -5,6 +7,7 @@ export class Entity {
   prevPosition: position;
 
   constructor(
+    public game: Game,
     public id: number,
     public position: position,
     public size: size,
