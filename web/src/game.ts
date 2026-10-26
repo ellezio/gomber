@@ -1,7 +1,7 @@
 import { GameMap, SCALE, TileType } from "./gameMap";
 import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
-import { Entity } from "./entities/entity";
+import { Entity, powerUpFromMessage } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { HUD } from "./hud";
@@ -30,14 +30,14 @@ export type playerInMsg = entityInMsg & {
   hp: number;
 };
 
-type bombInMsg = entityInMsg & {
+export type bombInMsg = entityInMsg & {
   cd: number;
   er: number;
 };
 
-type powerUpInMsg = entityInMsg;
+export type powerUpInMsg = entityInMsg;
 
-export type boardUpdateMessage = {
+export type gameUpdateMessage = {
   controlledEntityId: number;
   processedInput: { id: number; actions: Action[]; dt: number };
   board: {
@@ -47,6 +47,14 @@ export type boardUpdateMessage = {
     powerups: powerUpInMsg[];
   };
 };
+
+class GameState {
+  player: Player;
+  players: Player[] = [];
+  bombs: Bomb[] = [];
+  explosions: Explosion[] = [];
+  powerups: Entity[] = [];
+}
 
 export class Game {
   htmlElement: HTMLElement;
@@ -58,11 +66,11 @@ export class Game {
   remoteController = new RemotePlayerController();
   clients: clients;
 
-  player: Player;
-  players: Player[] = [];
-  bombs: Bomb[] = [];
-  explosions: Explosion[] = [];
-  powerups: Entity[] = [];
+  // may be in future this will be buffer over update messages that
+  // the client will try to catch up to. But for now it will be
+  // just the newest update message from server.
+  pendingServerState: gameUpdateMessage;
+  state = new GameState();
 
   fps = document.createElement("div");
   fc = 0;
@@ -112,6 +120,7 @@ export class Game {
   private gameLoop() {
     const dt = this.calcDeltatime();
     this.updateFPS(dt);
+    this.applyServerState();
     this.handleInput(dt);
     this.update(dt);
     this.render();
@@ -137,14 +146,14 @@ export class Game {
   }
 
   private handleInput(dt: number) {
-    if (!this.player.active) return;
+    if (!this.state.player.active) return;
 
     const input = this.inputController.currentInput(dt);
 
     if (input != null) {
-      if (this.player !== undefined) {
-        this.inputController.handleInput(input, this.player);
-        checkPlayerCollision(this.player, this.gameMap, this.bombs);
+      if (this.state.player !== undefined) {
+        this.inputController.handleInput(input, this.state.player);
+        checkPlayerCollision(this.state.player, this.gameMap, this.state.bombs);
       }
 
       this.networkInput.dt += dt;
@@ -195,18 +204,18 @@ export class Game {
   }
 
   private update(dt: number) {
-    this.players.forEach((p) => this.remoteController.update(p, dt));
-    this.bombs.forEach((b) => b.update(dt));
-    this.explosions.forEach((e) => e.update(dt));
+    this.state.players.forEach((p) => this.remoteController.update(p, dt));
+    this.state.bombs.forEach((b) => b.update(dt));
+    this.state.explosions.forEach((e) => e.update(dt));
 
-    this.bombs.forEach((b) => entityVsEntities(b, this.explosions));
+    this.state.bombs.forEach((b) => entityVsEntities(b, this.state.explosions));
 
-    this.bombs = this.bombs.filter((b) => b.active);
-    this.explosions = this.explosions.filter((e) => e.active);
+    this.state.bombs = this.state.bombs.filter((b) => b.active);
+    this.state.explosions = this.state.explosions.filter((e) => e.active);
 
     this.hud.updatePlayerStats({
-      hp: this.player.hp,
-      bombsCount: this.player.availableBombs,
+      hp: this.state.player.hp,
+      bombsCount: this.state.player.availableBombs,
     });
   }
 
@@ -220,17 +229,109 @@ export class Game {
 
     this.gameMap.render(this.ctx);
 
-    for (const player of this.players) {
+    for (const player of this.state.players) {
       player.render(this.ctx, SCALE);
     }
 
-    this.bombs.forEach((b) => b.render(this.ctx, SCALE));
-    this.explosions.forEach((e) => e.render(this.ctx, SCALE));
-    this.powerups.forEach((e) => e.render(this.ctx, SCALE));
-    this.player?.render(this.ctx, SCALE);
+    this.state.bombs.forEach((b) => b.render(this.ctx, SCALE));
+    this.state.explosions.forEach((e) => e.render(this.ctx, SCALE));
+    this.state.powerups.forEach((e) => e.render(this.ctx, SCALE));
+    this.state.player?.render(this.ctx, SCALE);
 
     this.ctx.translate(-offX, -offY);
     this.hud.render(this.ctx);
+  }
+
+  private applyServerState() {
+    if (this.pendingServerState) {
+      const pstate = this.pendingServerState;
+
+      this.state.players = this.state.players.filter((p) =>
+        pstate.board.players.find((bp) => p.id == bp.id),
+      );
+
+      for (const player of pstate.board.players) {
+        if (player.id == pstate.controlledEntityId) continue;
+
+        const existingPlayer = this.state.players.find(
+          (p) => p.id == player.id,
+        );
+        if (existingPlayer) {
+          existingPlayer.updateFromMessage(player);
+        } else {
+          this.state.players.push(Player.fromMessage(player));
+        }
+      }
+
+      for (const bomb of pstate.board.bombs ?? []) {
+        const exists = this.state.bombs.find((b) => b.id == bomb.id);
+        if (!exists) {
+          this.state.bombs.push(Bomb.fromMessage(bomb, this));
+        }
+      }
+
+      this.state.powerups =
+        pstate.board.powerups?.map(powerUpFromMessage) ?? [];
+
+      if (this.gameMap.grid === undefined) {
+        this.gameMap.setGrid(pstate.board.grid);
+      } else {
+        this.gameMap.updateGrid(pstate.board.grid);
+      }
+
+      for (const player of pstate.board.players) {
+        if (player.id === pstate.controlledEntityId) {
+          if (this.state.player === undefined) {
+            this.state.player = Player.fromMessage(player);
+            this.hud.updatePlayerStats({
+              hp: this.state.player.hp,
+              bombsCount: this.state.player.availableBombs,
+            });
+          }
+
+          if (pstate.processedInput === null) {
+            this.state.player.updateStatsFromMessage(player);
+            continue;
+          }
+
+          this.state.player.updateFromMessage(player);
+          // there is no need for interpolating current player because it's movement is predicted
+          this.state.player.position = { ...this.state.player.serverPosition };
+
+          let processingInput = this.inputBuffer.pop();
+
+          while (
+            processingInput &&
+            processingInput.seq != pstate.processedInput.id
+          ) {
+            processingInput = this.inputBuffer.pop();
+          }
+
+          for (const input of this.inputBuffer) {
+            this.inputController.handleInput(input.input, this.state.player);
+            checkPlayerCollision(
+              this.state.player,
+              this.gameMap,
+              this.state.bombs,
+            );
+          }
+
+          if (this.networkInput.actions.length > 0) {
+            this.inputController.handleInput(
+              this.networkInput,
+              this.state.player,
+            );
+            checkPlayerCollision(
+              this.state.player,
+              this.gameMap,
+              this.state.bombs,
+            );
+          }
+        }
+      }
+
+      this.pendingServerState = null;
+    }
   }
 
   public updateClients(clients: clients) {
@@ -244,101 +345,13 @@ export class Game {
     );
   }
 
-  public handleMessage(data: boardUpdateMessage) {
-    this.players = this.players.filter((p) =>
-      data.board.players.find((bp) => p.id == bp.id),
-    );
-
-    for (const player of data.board.players) {
-      if (player.id == data.controlledEntityId) continue;
-
-      const existingPlayer = this.players.find((p) => p.id == player.id);
-      if (existingPlayer) {
-        existingPlayer.updateFromMessage(player);
-      } else {
-        this.players.push(Player.fromMessage(player));
-      }
-    }
-
-    for (const bomb of data.board.bombs ?? []) {
-      const exists = this.bombs.find((b) => b.id == bomb.id);
-      if (!exists) {
-        const newBomb = new Bomb(
-          this,
-          bomb.id,
-          bomb.pos,
-          { width: bomb.aabb.max.x, height: bomb.aabb.max.y },
-          "white",
-          bomb.active,
-        );
-        newBomb.countDown = bomb.cd;
-        newBomb.explosionRange = bomb.er;
-        this.bombs.push(newBomb);
-      }
-    }
-
-    this.powerups =
-      data.board.powerups?.map((e) => {
-        return new Entity(
-          this,
-          e.id,
-          e.pos,
-          { width: e.aabb.max.x, height: e.aabb.max.y },
-          "purple",
-          e.active,
-        );
-      }) ?? [];
-
-    if (this.gameMap.grid === undefined) {
-      this.gameMap.setGrid(data.board.grid);
-    } else {
-      this.gameMap.updateGrid(data.board.grid);
-    }
-
-    for (const player of data.board.players) {
-      if (player.id === data.controlledEntityId) {
-        if (this.player === undefined) {
-          this.player = Player.fromMessage(player);
-          this.hud.updatePlayerStats({
-            hp: this.player.hp,
-            bombsCount: this.player.availableBombs,
-          });
-        }
-
-        if (data.processedInput === null) {
-          this.player.updateStatsFromMessage(player);
-          continue;
-        }
-
-        this.player.updateFromMessage(player);
-        // there is no need for interpolating current player because it's movement is predicted
-        this.player.position = { ...this.player.serverPosition };
-
-        let processingInput = this.inputBuffer.pop();
-
-        while (
-          processingInput &&
-          processingInput.seq != data.processedInput.id
-        ) {
-          processingInput = this.inputBuffer.pop();
-        }
-
-        for (const input of this.inputBuffer) {
-          this.inputController.handleInput(input.input, this.player);
-          checkPlayerCollision(this.player, this.gameMap, this.bombs);
-        }
-
-        if (this.networkInput.actions.length > 0) {
-          this.inputController.handleInput(this.networkInput, this.player);
-          checkPlayerCollision(this.player, this.gameMap, this.bombs);
-        }
-      }
-    }
+  public handleMessage(data: gameUpdateMessage) {
+    this.pendingServerState = data;
   }
 
   instantiate(entity: Entity) {
     if (entity instanceof Explosion) {
-      this.explosions.push(entity);
+      this.state.explosions.push(entity);
     }
   }
 

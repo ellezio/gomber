@@ -1,4 +1,4 @@
-import { boardUpdateMessage, Game } from "./game";
+import { gameUpdateMessage, Game } from "./game";
 import { Action } from "./input";
 import { Lobby, lobbyState } from "./lobby";
 import { LobbyItem, LobbyList } from "./lobbyList";
@@ -16,7 +16,7 @@ type ServerMessage =
   | { type: "lobbyList"; details: LobbyItem[] }
   | { type: "lobbyState"; details: lobbyState }
   | { type: "gameStarted"; details: never }
-  | { type: "snapshot"; details: boardUpdateMessage }
+  | { type: "snapshot"; details: gameUpdateMessage }
   | { type: "gameResult"; details: { winnerId: number } }
   | { type: "error"; details: string };
 
@@ -159,7 +159,7 @@ class Client {
     }
   }
 
-  handleGameSnapshot(snapshot: boardUpdateMessage) {
+  handleGameSnapshot(snapshot: gameUpdateMessage) {
     if (this.game && this.state == ClientState.InGame) {
       this.game.handleMessage(snapshot);
     }

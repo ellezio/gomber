@@ -1,5 +1,6 @@
+import { bombInMsg, Game } from "../game";
 import { TILE_SIZE } from "../gameMap";
-import { Entity } from "./entity";
+import { Entity, position, size } from "./entity";
 import { Explosion } from "./explosion";
 
 export class Bomb extends Entity {
@@ -7,6 +8,30 @@ export class Bomb extends Entity {
   explosionRange: number;
   private countAcc = 0;
   private toExplode = false;
+
+  constructor(
+    game: Game,
+    id: number,
+    position: position,
+    size: size,
+    active: boolean,
+  ) {
+    super(game, id, position, size, "white", active);
+  }
+
+  static fromMessage(msg: bombInMsg, game: Game) {
+    const b = new Bomb(
+      game,
+      msg.id,
+      msg.pos,
+      { width: msg.aabb.max.x, height: msg.aabb.max.y },
+      msg.active,
+    );
+    b.countDown = msg.cd;
+    b.explosionRange = msg.er;
+
+    return b;
+  }
 
   render(ctx: CanvasRenderingContext2D, scale: number) {
     if (!this.active) return;
@@ -78,7 +103,7 @@ export class Bomb extends Entity {
         // if there is bomb on an explosion way it should stop there
         // as the bomb is considered as blocking entity
         if (
-          this.game.bombs.some(
+          this.game.state.bombs.some(
             (bomb) =>
               bomb.active &&
               bomb !== this &&

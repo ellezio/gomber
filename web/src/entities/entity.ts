@@ -1,4 +1,4 @@
-import { Game } from "../game";
+import { Game, powerUpInMsg } from "../game";
 
 export type position = { x: number; y: number };
 export type size = { width: number; height: number };
@@ -28,4 +28,15 @@ export class Entity {
   }
 
   onCollision(_collider: Entity) {}
+}
+
+export function powerUpFromMessage(msg: powerUpInMsg) {
+  return new Entity(
+    this,
+    msg.id,
+    msg.pos,
+    { width: msg.aabb.max.x, height: msg.aabb.max.y },
+    "purple",
+    msg.active,
+  );
 }
