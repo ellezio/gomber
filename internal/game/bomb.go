@@ -17,14 +17,14 @@ type Bomb struct {
 
 func NewBomb(x float32, y float32, explosionRange int) *Bomb {
 	return &Bomb{
-		Entity: Entity{
-			Id:       0,
-			Tag:      "bomb",
-			Pos:      *math2.NewVector2(x, y),
-			Velocity: *math2.NewZeroVector2(),
-			AABB:     *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize, TileSize)),
-			Active:   true,
-		},
+		// Entity
+		Id:       0,
+		Tag:      "bomb",
+		Pos:      *math2.NewVector2(x, y),
+		Velocity: *math2.NewZeroVector2(),
+		AABB:     *math2.NewBox2(math2.NewZeroVector2(), math2.NewVector2(TileSize, TileSize)),
+		Active:   true,
+
 		CountDown:      3,
 		ExplosionRange: explosionRange,
 	}
@@ -56,14 +56,14 @@ func (b *Bomb) explode() {
 	)
 
 	for i := 1; i <= b.ExplosionRange; i++ {
-		if b.ExplosionRange == i || y-i <= 0 || b.game.BoardGrid[y-i][x] == Tile_Wall || b.game.BoardGrid[y-i][x] == Tile_DestructibleWall {
+		if b.ExplosionRange == i || y-i <= 0 || b.game.BoardGrid[y-i][x] == Tile_Wall || b.game.BoardGrid[y-i][x] == Tile_DestructibleWall || b.game.bombGrid[y-i][x] != 0 {
 			explosion.Pos.SubVector2(math2.NewVector2(0, float32(i*TileSize)))
 			explosion.AABB.Max.Y -= float32(TileSize * (b.ExplosionRange - i))
 			break
 		}
 	}
 	for i := 1; i <= b.ExplosionRange; i++ {
-		if y+i >= len(b.game.BoardGrid)-1 || b.game.BoardGrid[y+i][x] == Tile_Wall || b.game.BoardGrid[y+i][x] == Tile_DestructibleWall {
+		if y+i >= len(b.game.BoardGrid)-1 || b.game.BoardGrid[y+i][x] == Tile_Wall || b.game.BoardGrid[y+i][x] == Tile_DestructibleWall || b.game.bombGrid[y+i][x] != 0 {
 			explosion.AABB.Max.Y -= float32(TileSize * (b.ExplosionRange - i))
 			break
 		}
@@ -79,14 +79,14 @@ func (b *Bomb) explode() {
 	)
 
 	for i := 1; i <= b.ExplosionRange; i++ {
-		if b.ExplosionRange == i || x-i <= 0 || b.game.BoardGrid[y][x-i] == Tile_Wall || b.game.BoardGrid[y][x-i] == Tile_DestructibleWall {
+		if b.ExplosionRange == i || x-i <= 0 || b.game.BoardGrid[y][x-i] == Tile_Wall || b.game.BoardGrid[y][x-i] == Tile_DestructibleWall || b.game.bombGrid[y][x-i] != 0 {
 			explosion.Pos.SubVector2(math2.NewVector2(float32(i*TileSize), 0))
 			explosion.AABB.Max.X -= float32(TileSize * (b.ExplosionRange - i))
 			break
 		}
 	}
 	for i := 1; i <= b.ExplosionRange; i++ {
-		if x+i >= len(b.game.BoardGrid[y])-1 || b.game.BoardGrid[y][x+i] == Tile_Wall || b.game.BoardGrid[y][x+i] == Tile_DestructibleWall {
+		if x+i >= len(b.game.BoardGrid[y])-1 || b.game.BoardGrid[y][x+i] == Tile_Wall || b.game.BoardGrid[y][x+i] == Tile_DestructibleWall || b.game.bombGrid[y][x+i] != 0 {
 			explosion.AABB.Max.X -= float32(TileSize * (b.ExplosionRange - i))
 			break
 		}

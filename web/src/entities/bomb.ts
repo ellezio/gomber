@@ -62,7 +62,9 @@ export class Bomb extends Entity {
     const reach = (dx: number, dy: number): number => {
       let distance = 0;
       for (let i = 1; i <= this.explosionRange; i++) {
-        const tile = grid[y + dy * i]?.[x + dx * i];
+        const tileX = x + dx * i;
+        const tileY = y + dy * i;
+        const tile = grid[tileY]?.[tileX];
         if (tile === undefined) break;
 
         // don't render explosion on solid wall
@@ -72,6 +74,20 @@ export class Bomb extends Entity {
 
         // render explosion on destructible wall
         if (tile === 2) break;
+
+        // if there is bomb on an explosion way it should stop there
+        // as the bomb is considered as blocking entity
+        if (
+          this.game.bombs.some(
+            (bomb) =>
+              bomb.active &&
+              bomb !== this &&
+              Math.floor(bomb.position.x / TILE_SIZE) === tileX &&
+              Math.floor(bomb.position.y / TILE_SIZE) === tileY,
+          )
+        ) {
+          break;
+        }
       }
       return distance;
     };
