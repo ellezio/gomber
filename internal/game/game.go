@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	updatesRate = 60
+	simulationTickRate = 60
+	clientSyncTickRate = 20
 
 	TileSize = 50
 )
@@ -137,9 +138,12 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 	g.LoadMap(gameMap)
 
 	accumulator := 0.0
-	dt := 1.0 / updatesRate
+	clientSyncAccumulator := 0.0
 
-	ticker := time.NewTicker(time.Second / updatesRate)
+	dt := 1.0 / simulationTickRate
+	clientSyncThreshold := 1.0 / clientSyncTickRate
+
+	ticker := time.NewTicker(time.Second / simulationTickRate)
 	lastTs := time.Now()
 	for !g.over {
 		select {
@@ -151,12 +155,20 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 			lastTs = nowTs
 
 			accumulator += simTime.Seconds()
+			clientSyncAccumulator += simTime.Seconds()
 
 			for accumulator >= dt {
 				g.handleInput(float32(dt))
 				g.removeEntities()
 				g.checkCollision()
 				g.update(float32(dt))
+
+				accumulator -= dt
+
+			}
+
+			if clientSyncAccumulator >= clientSyncThreshold {
+				clientSyncAccumulator = 0
 
 				for _, client := range g.clients {
 					client.notifier.OnNewGameState(ClientGameState{
@@ -167,8 +179,6 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 
 					client.processedInput = nil
 				}
-
-				accumulator -= dt
 			}
 		}
 	}
@@ -191,18 +201,21 @@ func (g *Game) handleInput(dt float32) {
 			return
 		}
 
-		if input.Id <= client.lastProcessedInputSeq {
-			return
-		}
-
-		if commands := g.inputHandler.HandleInput(input); commands != nil {
-			for _, command := range commands {
-				command(client.controlledEntity, min(dt, input.Dt))
+		// TODO: change user input processing from tick specific to handling individual input from clients with packet constraints
+		for ; input != nil; input = client.inputs.Pop() {
+			if input.Id <= client.lastProcessedInputSeq {
+				return
 			}
-		}
 
-		client.processedInput = input
-		client.lastProcessedInputSeq = input.Id
+			if commands := g.inputHandler.HandleInput(input); commands != nil {
+				for _, command := range commands {
+					command(client.controlledEntity, min(dt, input.Dt))
+				}
+			}
+
+			client.processedInput = input
+			client.lastProcessedInputSeq = input.Id
+		}
 	}
 }
 
@@ -449,7 +462,7 @@ func (g *Game) handleGameMessage(event GameMessage) {
 		// discard user input that validates server simulation time
 		// if it's longer client should split messages.
 		// The rounding up is for precition error of floating point
-		if details.Input.Dt > float32(math.Ceil(1.0/updatesRate)) {
+		if details.Input.Dt > float32(math.Ceil(1.0/simulationTickRate)) {
 			return
 		}
 
@@ -488,7 +501,7 @@ func (g *Game) addClient(details ClientConnectedEvent) {
 		controlledEntity: player,
 
 		// maximal input buffering will be of 1 second
-		inputs: NewInputList(updatesRate),
+		inputs: NewInputList(simulationTickRate),
 	}
 }
 
