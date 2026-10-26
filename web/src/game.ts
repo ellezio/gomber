@@ -270,6 +270,10 @@ export class Game {
         }
       }
 
+      this.state.bombs
+        .filter((b) => !pstate.board.bombs.find((bb) => bb.id == b.id))
+        .forEach((b) => b.explode());
+
       this.state.powerups =
         pstate.board.powerups?.map(powerUpFromMessage) ?? [];
 

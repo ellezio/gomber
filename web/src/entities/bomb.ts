@@ -79,7 +79,7 @@ export class Bomb extends Entity {
     }
   }
 
-  private explode() {
+  explode() {
     const grid = this.game.gameMap.grid;
     const x = Math.floor(this.position.x / TILE_SIZE);
     const y = Math.floor(this.position.y / TILE_SIZE);
