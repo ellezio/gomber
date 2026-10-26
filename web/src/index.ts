@@ -302,9 +302,9 @@ function testShowGame() {
 }
 
 window.onload = async function () {
-  // const client = new Client();
-  // client.connect();
-  // client.showLoginPage();
+  const client = new Client();
+  client.connect();
+  client.showLoginPage();
 
-  testShowGame();
+  // testShowGame();
 };
