@@ -144,20 +144,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		return
 	}
 
-	p, err := c.readTextMessage(conn)
-	if err != nil {
-		return
-	}
-
-	c.info.Name, err = parseNameMessage(p)
-	if err != nil {
-		closeWithPolicyViolation(conn, err.Error())
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	c.send(ctx, NameMessage{value: "name"})
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -169,8 +156,29 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		}
 	})
 
+	defer func() {
+		cancel()
+		_ = conn.Close()
+		wg.Wait()
+	}()
+
 	for {
-		p, err = c.readTextMessage(conn)
+		p, err := c.readTextMessage(conn)
+		if err != nil {
+			return
+		}
+
+		c.info.Name, err = parseNameMessage(p)
+		if err == nil {
+			break
+		}
+		c.send(ctx, ErrorMessage{value: err.Error()})
+	}
+
+	c.send(ctx, NameMessage{value: "name"})
+
+	for {
+		p, err := c.readTextMessage(conn)
 		if err != nil {
 			break
 		}
@@ -186,10 +194,6 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		c.lobbyHandler = nil
 	}
 	c.mu.Unlock()
-
-	cancel()
-	_ = conn.Close()
-	wg.Wait()
 }
 
 // readTextMessage is helper for reading message from websocket.
@@ -207,6 +211,7 @@ func (c *ClientSession) readTextMessage(conn *websocket.Conn) ([]byte, error) {
 		return nil, err
 	}
 
+	// Disconnecting here is valid because I strictly operate on one message type
 	if messageType != websocket.TextMessage {
 		closeWithPolicyViolation(conn, "only text messages are supported")
 		return nil, fmt.Errorf("invalid message type, expected to be TextMessage")
