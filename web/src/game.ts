@@ -113,6 +113,8 @@ export class Game {
 
     this.updateInterval = window.setInterval(
       this.gameLoop.bind(this),
+      // this results with integer so the precision in case 60 fps
+      // where dt is 16.666666 ms is truncated to 16 ms
       1000 / this.updateRate,
     );
   }
@@ -166,9 +168,7 @@ export class Game {
 
     this.networkTickAccTime += dt;
     if (this.networkTickAccTime >= this.networkTickTime) {
-      while (this.networkTickAccTime >= this.networkTickTime) {
-        this.networkTickAccTime -= this.networkTickTime;
-      }
+      this.networkTickAccTime %= this.networkTickTime;
 
       const netInput = structuredClone(this.networkInput);
       if (input) {

@@ -145,6 +145,7 @@ func (g *Game) Run(gameMap *GameMap) GameResult {
 
 	ticker := time.NewTicker(time.Second / simulationTickRate)
 	lastTs := time.Now()
+
 	for !g.over {
 		select {
 		case msg := <-g.ch:
@@ -198,13 +199,13 @@ func (g *Game) handleInput(dt float32) {
 		client.controlledEntity.Velocity = *math2.NewVector2(0, 0)
 		input := client.inputs.Pop()
 		if input == nil {
-			return
+			continue
 		}
 
 		// TODO: change user input processing from tick specific to handling individual input from clients with packet constraints
 		for ; input != nil; input = client.inputs.Pop() {
 			if input.Id <= client.lastProcessedInputSeq {
-				return
+				continue
 			}
 
 			if commands := g.inputHandler.HandleInput(input); commands != nil {

@@ -46,6 +46,16 @@ func (i *InputList) IsFull() bool {
 	return (i.rear+1)%i.cap == i.front
 }
 
+func (i *InputList) Len() int {
+	if i.rear == i.front {
+		return 0
+	} else if i.rear > i.front {
+		return i.rear - i.front
+	} else {
+		return i.cap - i.front + i.rear
+	}
+}
+
 func (i *InputList) Append(inp *Input) {
 	if i.IsFull() {
 		return
@@ -70,7 +80,6 @@ type Input struct {
 	Id      int      `json:"id"`
 	Actions []action `json:"actions"`
 	Dt      float32  `json:"dt"`
-	next    *Input
 }
 
 func (i *Input) hasAction(action action) bool {
