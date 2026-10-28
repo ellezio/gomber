@@ -52,6 +52,12 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		server := NewServer()
 		conn := dialTestClient(t, server)
+
+		msgType, details := readServerMessage(t, conn)
+		if msgType != "sessionInfo" {
+			t.Fatalf("invalid first message type from server. got=%q want=%q", msgType, "sessioinInfo")
+		}
+
 		if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {
 			t.Fatal(err)
 		}
@@ -59,7 +65,7 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 		lobbyID := server.lobbies.Create("test")
 		lobby := server.lobbies.lobbies[lobbyID].lobby
 
-		msgType, details := readServerMessage(t, conn)
+		msgType, details = readServerMessage(t, conn)
 		if msgType != "ok" || string(details) != `"name"` {
 			t.Fatalf("name response = %s %s", msgType, details)
 		}
@@ -111,6 +117,9 @@ func TestWebSocketRejectsInvalidMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conn := dialTestClient(t, NewServer())
+
+			// first messsage is client session info
+			readServerMessage(t, conn)
 
 			if tt.validNameFirst {
 				if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {

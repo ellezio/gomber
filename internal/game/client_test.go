@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"uuid"
 )
 
 func TestParseNameMessage(t *testing.T) {
@@ -71,7 +72,7 @@ func TestParseNameMessage(t *testing.T) {
 func TestClientHandleInputErrors(t *testing.T) {
 	gmaps := NewGameMapManager()
 	lm := NewLobbyManager(gmaps)
-	client := NewClient(7, lm)
+	client := NewClient(7, uuid.New(), lm)
 	client.info.Name = "Jojo"
 
 	tests := []struct {
@@ -104,7 +105,7 @@ func TestClientHandleInputErrors(t *testing.T) {
 }
 
 func TestClientSendBufferFullAndCancellation(t *testing.T) {
-	client := NewClient(1, nil)
+	client := NewClient(1, uuid.New(), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	for range updateQueueSize {
 		client.send(ctx, NameMessage{value: "Mr Big"})
@@ -129,7 +130,7 @@ func TestClientSendBufferFullAndCancellation(t *testing.T) {
 
 func TestClientPingLatency(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		client := NewClient(1, nil)
+		client := NewClient(1, uuid.New(), nil)
 		id := client.registerPing()
 		time.Sleep(100 * time.Millisecond)
 		if err := client.measurePingLatency(id); err != nil {

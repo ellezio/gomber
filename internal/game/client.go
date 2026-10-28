@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+	"uuid"
 
 	"github.com/gorilla/websocket"
 )
@@ -40,6 +41,7 @@ func (NameMessage) iClientMessage()        {}
 func (ErrorMessage) iClientMessage()       {}
 func (LobbyClosed) iClientMessage()        {}
 func (Lobbies) iClientMessage()            {}
+func (SessionInfoMessage) iClientMessage() {}
 
 type Lobbies []*LobbyInfo
 
@@ -51,33 +53,38 @@ type ErrorMessage struct {
 	value string
 }
 
+type SessionInfoMessage struct {
+	SessionID string `json:"sid"`
+}
+
 type LobbyClosed struct {
 }
 
 type ClientManager struct {
 	mu      sync.Mutex
 	nextID  atomic.Int32
-	clients map[int]*ClientSession
+	clients map[uuid.UUID]*ClientSession
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients: make(map[int]*ClientSession),
+		clients: make(map[uuid.UUID]*ClientSession),
 	}
 }
 
 func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
 	clientID := int(cm.nextID.Add(1))
-	client := NewClient(clientID, lobbies)
+	sessionID := uuid.NewV4()
+	client := NewClient(clientID, sessionID, lobbies)
 
 	cm.mu.Lock()
-	cm.clients[clientID] = client
+	cm.clients[sessionID] = client
 	cm.mu.Unlock()
 
 	client.Serve(conn)
 
 	cm.mu.Lock()
-	delete(cm.clients, clientID)
+	delete(cm.clients, sessionID)
 	cm.mu.Unlock()
 }
 
@@ -88,7 +95,8 @@ type ClientInfo struct {
 }
 
 type ClientSession struct {
-	info ClientInfo
+	info      ClientInfo
+	sessionID uuid.UUID
 
 	// Those channels cannot be closed because some part of system may still
 	// use them to notify client until they got notified about client session
@@ -110,9 +118,10 @@ type ClientSession struct {
 	nextPingID     int
 }
 
-func NewClient(id int, lm *LobbyManager) *ClientSession {
+func NewClient(id int, sessionID uuid.UUID, lm *LobbyManager) *ClientSession {
 	return &ClientSession{
 		info:             ClientInfo{Id: id},
+		sessionID:        sessionID,
 		update:           make(chan ClientMessage, updateQueueSize),
 		updateBufferFull: make(chan struct{}, 1),
 		LobbyManager:     lm,
@@ -161,6 +170,8 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		_ = conn.Close()
 		wg.Wait()
 	}()
+
+	c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String()})
 
 	for {
 		p, err := c.readTextMessage(conn)
@@ -599,6 +610,12 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 	case GameStartedMessage:
 		msg = Message{
 			Type: "gameStarted",
+		}
+
+	case SessionInfoMessage:
+		msg = Message{
+			Type:    "sessionInfo",
+			Details: m,
 		}
 
 	default:
