@@ -82,6 +82,7 @@ func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager
 	cm.mu.Unlock()
 
 	client.Serve(conn)
+	client.Destroy()
 
 	cm.mu.Lock()
 	delete(cm.clients, sessionID)
@@ -94,9 +95,18 @@ type ClientInfo struct {
 	Latency int    `json:"latency"`
 }
 
+type clientSessionState int
+
+const (
+	state_Created clientSessionState = iota
+	state_Started
+	state_Logged
+)
+
 type ClientSession struct {
 	info      ClientInfo
 	sessionID uuid.UUID
+	state     clientSessionState
 
 	// Those channels cannot be closed because some part of system may still
 	// use them to notify client until they got notified about client session
@@ -122,6 +132,7 @@ func NewClient(id int, sessionID uuid.UUID, lm *LobbyManager) *ClientSession {
 	return &ClientSession{
 		info:             ClientInfo{Id: id},
 		sessionID:        sessionID,
+		state:            state_Created,
 		update:           make(chan ClientMessage, updateQueueSize),
 		updateBufferFull: make(chan struct{}, 1),
 		LobbyManager:     lm,
@@ -171,22 +182,24 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		wg.Wait()
 	}()
 
-	c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String()})
+	if c.state == state_Created {
+		c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String()})
 
-	for {
-		p, err := c.readTextMessage(conn)
-		if err != nil {
-			return
+		for {
+			p, err := c.readTextMessage(conn)
+			if err != nil {
+				return
+			}
+
+			c.info.Name, err = parseNameMessage(p)
+			if err == nil {
+				break
+			}
+			c.send(ctx, ErrorMessage{value: err.Error()})
 		}
 
-		c.info.Name, err = parseNameMessage(p)
-		if err == nil {
-			break
-		}
-		c.send(ctx, ErrorMessage{value: err.Error()})
+		c.send(ctx, NameMessage{value: "name"})
 	}
-
-	c.send(ctx, NameMessage{value: "name"})
 
 	for {
 		p, err := c.readTextMessage(conn)
@@ -198,7 +211,10 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 			c.send(ctx, ErrorMessage{value: err.Error()})
 		}
 	}
+}
 
+// Destroy disconnects session from other parts of system hence making reconnecting imposible.
+func (c *ClientSession) Destroy() {
 	c.mu.Lock()
 	if c.lobbyHandler != nil {
 		c.lobbyHandler.Disconnect()
