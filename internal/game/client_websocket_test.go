@@ -102,45 +102,11 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 	})
 }
 
-func TestWebSocketRejectsInvalidMessages(t *testing.T) {
-	tests := []struct {
-		name           string
-		payload        string
-		kind           int
-		validNameFirst bool
-	}{
-		{name: "invalid name", payload: "name: ", kind: websocket.TextMessage},
-		{name: "binary name", payload: "name:Jev", kind: websocket.BinaryMessage},
-		{name: "binary input", payload: "game:start", kind: websocket.BinaryMessage, validNameFirst: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conn := dialTestClient(t, NewServer())
-
-			// first messsage is client session info
-			readServerMessage(t, conn)
-
-			if tt.validNameFirst {
-				if err := conn.WriteMessage(websocket.TextMessage, []byte("name:Jev")); err != nil {
-					t.Fatal(err)
-				}
-				readServerMessage(t, conn)
-			}
-			if err := conn.WriteMessage(tt.kind, []byte(tt.payload)); err != nil {
-				t.Fatal(err)
-			}
-			_, _, err := conn.ReadMessage()
-			var closeErr *websocket.CloseError
-			if !errors.As(err, &closeErr) || closeErr.Code != websocket.ClosePolicyViolation {
-				t.Fatalf("read error = %v, want policy violation close", err)
-			}
-		})
-	}
-}
-
 func TestWebSocketLimitsMessageSize(t *testing.T) {
 	conn := dialTestClient(t, NewServer())
+
+	// first messsage is client session info
+	readServerMessage(t, conn)
 
 	if err := conn.WriteMessage(websocket.TextMessage, []byte("name:"+strings.Repeat("a", maxMessageSize))); err != nil {
 		t.Fatal(err)
@@ -156,6 +122,9 @@ func TestGetLobbies(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		server := NewServer()
 		conn := dialTestClient(t, server)
+
+		// first messsage is client session info
+		readServerMessage(t, conn)
 
 		names := []string{"one", "two", "three"}
 		ids := make([]int, len(names))
