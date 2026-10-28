@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"uuid"
 
 	"github.com/gorilla/websocket"
 )
@@ -171,6 +172,42 @@ func TestGetLobbies(t *testing.T) {
 			if lobby.Name != names[idx] {
 				t.Errorf("(idx:%d) wrong lobby name. got=%s, want=%s", idx, lobby.Name, names[idx])
 			}
+		}
+	})
+}
+
+func TestClientStateFlow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		server := NewServer()
+		conn := dialTestClient(t, server)
+
+		// first messsage is client session info
+		msgType, rawJson := readServerMessage(t, conn)
+		if msgType != "sessionInfo" {
+			t.Fatalf("expected session info got=%q", msgType)
+		}
+
+		var sessionMsg SessionInfoMessage
+		if err := json.Unmarshal(rawJson, &sessionMsg); err != nil {
+			t.Fatal(err)
+		}
+
+		client, ok := server.clients.clients[uuid.MustParse(sessionMsg.SessionID)]
+		if !ok {
+			t.Fatal("expected to get client")
+		}
+
+		if client.state != state_Created {
+			t.Fatalf("expected client state to be %d got %d", state_Created, client.state)
+		}
+
+		conn.WriteMessage(websocket.TextMessage, []byte("name:Jev"))
+		readServerMessage(t, conn)
+
+		synctest.Wait()
+
+		if client.state != state_Logged {
+			t.Fatalf("expected client state to be %d got %d", state_Created, client.state)
 		}
 	})
 }

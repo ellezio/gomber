@@ -99,7 +99,6 @@ type clientSessionState int
 
 const (
 	state_Created clientSessionState = iota
-	state_Started
 	state_Logged
 )
 
@@ -198,6 +197,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 			c.send(ctx, ErrorMessage{value: err.Error()})
 		}
 
+		c.state = state_Logged
 		c.send(ctx, NameMessage{value: "name"})
 	}
 
