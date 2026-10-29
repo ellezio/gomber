@@ -23,6 +23,6 @@ func setupRoutes(gameServer *game.Server) {
 			return
 		}
 
-		gameServer.ServeClient(conn)
+		gameServer.ServeClienth(conn)
 	})
 }

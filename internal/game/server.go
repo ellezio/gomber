@@ -32,6 +32,6 @@ func (s *Server) LoadMaps() error {
 	return nil
 }
 
-func (s *Server) ServeClient(conn *websocket.Conn) {
-	s.clients.ServeClient(conn, s.lobbies)
+func (s *Server) ServeClienth(conn *websocket.Conn) {
+	s.clients.ConnectClient(conn, s.lobbies)
 }

@@ -54,21 +54,57 @@ type ErrorMessage struct {
 }
 
 type SessionInfoMessage struct {
-	SessionID string `json:"sid"`
+	SessionID string             `json:"sid"`
+	State     clientSessionState `json:"state"`
 }
 
 type LobbyClosed struct {
 }
 
+type ClientWrapper struct {
+	session  *ClientSession
+	reconnCh chan<- *websocket.Conn
+}
+
 type ClientManager struct {
 	mu      sync.Mutex
 	nextID  atomic.Int32
-	clients map[uuid.UUID]*ClientSession
+	clients map[uuid.UUID]*ClientWrapper
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients: make(map[uuid.UUID]*ClientSession),
+		clients: make(map[uuid.UUID]*ClientWrapper),
+	}
+}
+
+func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManager) {
+	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		fmt.Println(err)
+		conn.Close()
+		return
+	}
+
+	msg, err := readTextMessage(conn)
+	if err != nil {
+		fmt.Println(err)
+		conn.Close()
+		return
+	}
+
+	if len(msg) == 0 {
+		cm.ServeClient(conn, lobbies)
+	} else {
+		sessionID, _ := uuid.Parse(string(msg))
+		cm.mu.Lock()
+		if clientWrp, ok := cm.clients[sessionID]; ok {
+			clientWrp.reconnCh <- conn
+			cm.mu.Unlock()
+			return
+		}
+		cm.mu.Unlock()
+
+		cm.ServeClient(conn, lobbies)
 	}
 }
 
@@ -76,12 +112,18 @@ func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager
 	clientID := int(cm.nextID.Add(1))
 	sessionID := uuid.NewV4()
 	client := NewClient(clientID, sessionID, lobbies)
+	reconnCh := make(chan *websocket.Conn)
+	clientWrp := &ClientWrapper{session: client, reconnCh: reconnCh}
 
 	cm.mu.Lock()
-	cm.clients[sessionID] = client
+	cm.clients[sessionID] = clientWrp
 	cm.mu.Unlock()
 
-	client.Serve(conn)
+	for conn != nil {
+		client.Serve(conn)
+		conn = <-reconnCh
+	}
+
 	client.Destroy()
 
 	cm.mu.Lock()
@@ -100,6 +142,7 @@ type clientSessionState int
 const (
 	state_Created clientSessionState = iota
 	state_Logged
+	state_InLobby
 )
 
 type ClientSession struct {
@@ -146,6 +189,14 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 	}
 	defer conn.Close()
 
+	for len(c.update) > 0 {
+		<-c.update
+	}
+
+	if len(c.updateBufferFull) > 0 {
+		<-c.updateBufferFull
+	}
+
 	conn.SetReadLimit(maxMessageSize)
 	conn.SetPongHandler(func(pingID string) error {
 		err := c.measurePingLatency(pingID)
@@ -181,11 +232,20 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		wg.Wait()
 	}()
 
-	if c.state == state_Created {
-		c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String()})
+	c.mu.Lock()
+	if c.lobbyHandler != nil {
+		if err := c.joinToLobby(ctx, c.lobbyHandler.lobbyID); err != nil {
+			c.state = state_Logged
+			c.send(ctx, ErrorMessage{value: err.Error()})
+		}
+	}
+	c.mu.Unlock()
 
+	c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String(), State: c.state})
+
+	if c.state == state_Created {
 		for {
-			p, err := c.readTextMessage(conn)
+			p, err := readTextMessage(conn)
 			if err != nil {
 				return
 			}
@@ -202,7 +262,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 	}
 
 	for {
-		p, err := c.readTextMessage(conn)
+		p, err := readTextMessage(conn)
 		if err != nil {
 			break
 		}
@@ -226,13 +286,13 @@ func (c *ClientSession) Destroy() {
 // readTextMessage is helper for reading message from websocket.
 // It handles invalid messages and closed connections.
 // When error is returned connection is unusable and should be closed.
-func (c *ClientSession) readTextMessage(conn *websocket.Conn) ([]byte, error) {
+func readTextMessage(conn *websocket.Conn) ([]byte, error) {
 	messageType, p, err := conn.ReadMessage()
 
 	if err != nil {
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-			slog.Error("failed to read websocket's text message", "clientID", c.info.Id, "error", err.Error())
-			return nil, fmt.Errorf("client %d: reading message: %v", c.info.Id, err)
+			slog.Error("failed to read websocket's text message", "error", err.Error())
+			return nil, fmt.Errorf("reading message: %v", err)
 		}
 
 		return nil, err
@@ -429,6 +489,8 @@ func (c *ClientSession) handleLobbyCreate(ctx context.Context, crm *ClientRequst
 		return errors.New("failed to enter newly created lobby")
 	}
 
+	c.state = state_InLobby
+
 	return nil
 }
 
@@ -453,6 +515,8 @@ func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, crm *Clien
 	if err := c.joinToLobby(ctx, lobbyID); err != nil {
 		return err
 	}
+
+	c.state = state_InLobby
 
 	return nil
 }
@@ -479,6 +543,8 @@ func (c *ClientSession) handleLobbyLeave() error {
 
 	c.lobbyHandler.Disconnect()
 	c.lobbyHandler = nil
+
+	c.state = state_Logged
 
 	return nil
 }
@@ -526,10 +592,13 @@ func (c *ClientSession) send(ctx context.Context, cm ClientMessage) {
 	select {
 	case <-ctx.Done():
 		return
+	default:
+	}
+
+	select {
 	case c.update <- cm:
 		return
 	default:
-
 	}
 
 	select {

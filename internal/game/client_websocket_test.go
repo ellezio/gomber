@@ -22,7 +22,7 @@ func dialTestClient(t *testing.T, server *Server) *websocket.Conn {
 		if err != nil {
 			return
 		}
-		server.ServeClient(conn)
+		server.ServeClienth(conn)
 	}))
 	t.Cleanup(testServer.Close)
 
@@ -197,8 +197,8 @@ func TestClientStateFlow(t *testing.T) {
 			t.Fatal("expected to get client")
 		}
 
-		if client.state != state_Created {
-			t.Fatalf("expected client state to be %d got %d", state_Created, client.state)
+		if client.session.state != state_Created {
+			t.Fatalf("expected client state to be %d got %d", state_Created, client.session.state)
 		}
 
 		conn.WriteMessage(websocket.TextMessage, []byte("name:Jev"))
@@ -206,8 +206,8 @@ func TestClientStateFlow(t *testing.T) {
 
 		synctest.Wait()
 
-		if client.state != state_Logged {
-			t.Fatalf("expected client state to be %d got %d", state_Created, client.state)
+		if client.session.state != state_Logged {
+			t.Fatalf("expected client state to be %d got %d", state_Created, client.session.state)
 		}
 	})
 }

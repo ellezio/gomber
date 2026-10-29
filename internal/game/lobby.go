@@ -133,11 +133,6 @@ func (lm *LobbyManager) Join(lobbyID int, info ClientInfo, sendFn SendClientMess
 		return nil, err
 	}
 
-	lobbyHandler := &LobbyHandler{
-		clientID: info.Id,
-		lobbyCh:  lobby.ch,
-	}
-
 	responseCh := make(chan LobbyResponse, 1)
 	msg := ConnectClientMessage{
 		info:     info,
@@ -158,6 +153,12 @@ func (lm *LobbyManager) Join(lobbyID int, info ClientInfo, sendFn SendClientMess
 		if response.err != nil {
 			return nil, response.err
 		}
+	}
+
+	lobbyHandler := &LobbyHandler{
+		clientID: info.Id,
+		lobbyID:  lobbyID,
+		lobbyCh:  lobby.ch,
 	}
 
 	return lobbyHandler, nil
@@ -198,6 +199,7 @@ func (lm *LobbyManager) Lobbies() []*LobbyInfo {
 }
 
 type LobbyClient struct {
+	mu     sync.Mutex
 	sendFn SendClientMessage
 
 	clientID int
@@ -208,7 +210,9 @@ type LobbyClient struct {
 }
 
 func (lc *LobbyClient) OnNewGameState(state ClientGameState) {
+	lc.mu.Lock()
 	lc.sendFn(state)
+	lc.mu.Unlock()
 }
 
 type LobbyClientInfo struct {
@@ -221,6 +225,7 @@ type LobbyState struct {
 	Clients    []LobbyClientInfo `json:"clients"`
 	GameMaps   []string          `json:"gameMaps"`
 	CurrentMap string            `json:"currentMap"`
+	State      int32             `json:"state"`
 }
 
 const (
@@ -344,25 +349,38 @@ func (l *Lobby) updateClient(msg UpdateClientMessage) {
 }
 
 func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
-	switch l.state.Load() {
-	case state_inGame:
-		return errors.New("cannot join, game is running")
-	case state_closing:
-		return errors.New("cannot join, lobby just closed")
-	}
+	if client, ok := l.clients[connClientMsg.info.Id]; ok {
+		if l.state.Load() == state_closing {
+			return errors.New("cannot join, lobby just closed")
+		}
 
-	lc := LobbyClient{
-		clientID: connClientMsg.info.Id,
-		name:     connClientMsg.info.Name,
-		latency:  connClientMsg.info.Latency,
-		sendFn:   connClientMsg.sendFn,
-	}
+		client.mu.Lock()
+		client.sendFn = connClientMsg.sendFn
+		client.mu.Unlock()
 
-	if len(l.clients) == 0 {
-		lc.Admin = true
-	}
+		if l.state.Load() == state_inGame {
+			l.gameCh <- ClientConnectedEvent{ClientId: client.clientID, Notifier: client, Name: client.name}
+		}
+	} else {
+		switch l.state.Load() {
+		case state_inGame:
+			return errors.New("cannot join, game is running")
+		case state_closing:
+			return errors.New("cannot join, lobby just closed")
+		}
+		lc := LobbyClient{
+			clientID: connClientMsg.info.Id,
+			name:     connClientMsg.info.Name,
+			latency:  connClientMsg.info.Latency,
+			sendFn:   connClientMsg.sendFn,
+		}
 
-	l.clients[lc.clientID] = &lc
+		if len(l.clients) == 0 {
+			lc.Admin = true
+		}
+
+		l.clients[lc.clientID] = &lc
+	}
 
 	ls := l.State()
 
@@ -454,7 +472,7 @@ func (l *Lobby) runGame(clientId int) error {
 }
 
 func (l *Lobby) State() LobbyState {
-	ls := LobbyState{Name: l.name}
+	ls := LobbyState{Name: l.name, State: l.state.Load()}
 	for _, c := range l.clients {
 		ls.Clients = append(ls.Clients, LobbyClientInfo{Id: c.clientID, Name: c.name, Latency: c.latency, Admin: c.Admin})
 	}
@@ -500,6 +518,7 @@ var LobbyClosedErr = errors.New("lobby has been closed")
 
 type LobbyHandler struct {
 	clientID int
+	lobbyID  int
 	lobbyCh  chan<- LobbyMessege
 }
 

@@ -1,6 +1,6 @@
 import { gameUpdateMessage, Game } from "./game";
 import { Action } from "./input";
-import { Lobby, lobbyState } from "./lobby";
+import { Lobby, lobbyState, ServerLobbyState } from "./lobby";
 import { LobbyItem, LobbyList } from "./lobbyList";
 
 const loginView = document.getElementById("login-view");
@@ -18,6 +18,7 @@ type ServerMessage =
   | { type: "gameStarted"; details: never }
   | { type: "snapshot"; details: gameUpdateMessage }
   | { type: "gameResult"; details: { winnerId: number } }
+  | { type: "sessionInfo"; details: { sid: string; state: number } }
   | { type: "error"; details: string };
 
 type networkInput = {
@@ -45,6 +46,10 @@ class Client {
   connect() {
     this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
     this.conn.onmessage = this.handleMessage.bind(this);
+    this.conn.onopen = () => {
+      const sid = localStorage.getItem("sid");
+      this.conn.send(sid ?? "");
+    };
   }
 
   sendGameStart() {
@@ -102,6 +107,24 @@ class Client {
       case "snapshot":
         this.handleGameSnapshot(msg.details);
         break;
+      case "sessionInfo":
+        localStorage.setItem("sid", msg.details.sid);
+        // InLobby
+        if (msg.details.state == 2) {
+          // The lobbyState message may arriave before session info when reconnecting
+          if (this.lobby) {
+            if (this.lobby.state.state == ServerLobbyState.inLobby) {
+              this.showLobby();
+            } else if (this.lobby.state.state == ServerLobbyState.inGame) {
+              this.showGame();
+              this.startGame(false);
+            }
+          } else {
+            this.lobby ??= this.createLobby();
+            this.state = ClientState.InLobby;
+          }
+        }
+        break;
       case "error":
         this.handleErrorMessage(msg.details);
         break;
@@ -109,12 +132,16 @@ class Client {
   }
 
   handleLobbyState(state: lobbyState) {
-    if (this.lobby) {
-      this.lobby.update(state);
+    this.lobby ??= this.createLobby();
+    this.lobby.update(state);
 
-      if (this.state == ClientState.JoiningLobby) {
-        this.showLobby();
-      } else if (this.state == ClientState.InLobby) {
+    if (this.state == ClientState.JoiningLobby) {
+      this.showLobby();
+    } else if (this.state == ClientState.InLobby) {
+      if (this.lobby.state.state == ServerLobbyState.inGame) {
+        this.showGame();
+        this.startGame(false);
+      } else {
         this.lobby.render();
       }
     }

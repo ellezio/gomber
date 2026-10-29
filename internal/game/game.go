@@ -451,7 +451,11 @@ func (g *Game) playerVsCollectable(player *Player) {
 func (g *Game) handleGameMessage(event GameMessage) {
 	switch details := event.(type) {
 	case ClientConnectedEvent:
-		g.addClient(details)
+		if client, ok := g.clients[details.ClientId]; ok {
+			g.reconnectClient(client, details)
+		} else {
+			g.addClient(details)
+		}
 
 	case ClientDisconnectedEvent:
 		g.clientDisconnected(details.Id)
@@ -471,6 +475,11 @@ func (g *Game) handleGameMessage(event GameMessage) {
 			g.clients[details.Id].inputs.Append(&details.Input)
 		}
 	}
+}
+
+func (g *Game) reconnectClient(client *GameClient, event ClientConnectedEvent) {
+	client.notifier = event.Notifier
+	client.lastProcessedInputSeq = 0
 }
 
 // handles client's id generation and instantiate player's entity

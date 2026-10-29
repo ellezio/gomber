@@ -5,11 +5,18 @@ export type clients = {
   admin: boolean;
 }[];
 
+export enum ServerLobbyState {
+  inLobby,
+  inGame,
+  closing,
+}
+
 export type lobbyState = {
   name: string;
   clients: clients;
   gameMaps: string[];
   currentMap: string;
+  state: ServerLobbyState;
 };
 
 export class Lobby {
