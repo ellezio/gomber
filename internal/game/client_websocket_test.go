@@ -22,7 +22,7 @@ func dialTestClient(t *testing.T, server *Server) *websocket.Conn {
 		if err != nil {
 			return
 		}
-		server.ServeClienth(conn)
+		server.ServeClient(conn)
 	}))
 	t.Cleanup(testServer.Close)
 

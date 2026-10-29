@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	maxMessageSize  = 4 << 10
-	maxNameLength   = 32
-	updateQueueSize = 64
-	writeTimeout    = 10 * time.Second
-	readTimeout     = 60 * time.Second
-	pingInterval    = readTimeout * 1 / 10
+	maxMessageSize     = 4 << 10
+	maxNameLength      = 32
+	updateQueueSize    = 64
+	writeTimeout       = 10 * time.Second
+	readTimeout        = 60 * time.Second
+	pingInterval       = readTimeout * 1 / 10
+	reconnectionWindow = 60 * time.Second
 )
 
 type SendClientMessage func(ClientMessage)
@@ -64,6 +65,7 @@ type LobbyClosed struct {
 type ClientWrapper struct {
 	session  *ClientSession
 	reconnCh chan<- *websocket.Conn
+	done     <-chan struct{}
 }
 
 type ClientManager struct {
@@ -92,20 +94,24 @@ func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManag
 		return
 	}
 
-	if len(msg) == 0 {
-		cm.ServeClient(conn, lobbies)
-	} else {
+	if len(msg) > 0 {
 		sessionID, _ := uuid.Parse(string(msg))
+
 		cm.mu.Lock()
-		if clientWrp, ok := cm.clients[sessionID]; ok {
-			clientWrp.reconnCh <- conn
-			cm.mu.Unlock()
-			return
-		}
+		clientWrp, ok := cm.clients[sessionID]
 		cm.mu.Unlock()
 
-		cm.ServeClient(conn, lobbies)
+		if ok {
+			select {
+			case clientWrp.reconnCh <- conn:
+				return
+			case <-clientWrp.done:
+			}
+		}
+
 	}
+
+	cm.ServeClient(conn, lobbies)
 }
 
 func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
@@ -113,22 +119,53 @@ func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager
 	sessionID := uuid.NewV4()
 	client := NewClient(clientID, sessionID, lobbies)
 	reconnCh := make(chan *websocket.Conn)
-	clientWrp := &ClientWrapper{session: client, reconnCh: reconnCh}
+	done := make(chan struct{})
+	clientWrp := &ClientWrapper{session: client, reconnCh: reconnCh, done: done}
 
 	cm.mu.Lock()
 	cm.clients[sessionID] = clientWrp
 	cm.mu.Unlock()
 
+	serverDone := make(chan error)
+
+	reconnTimer := time.NewTimer(reconnectionWindow)
+	reconnTimer.Stop()
+	defer reconnTimer.Stop()
+
+loop:
 	for conn != nil {
-		client.Serve(conn)
-		conn = <-reconnCh
+		go func() {
+			serverDone <- client.Serve(conn)
+		}()
+
+		select {
+		case newconn := <-reconnCh:
+			conn.Close()
+			<-serverDone
+			conn = newconn
+
+		case err := <-serverDone:
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				break loop
+			}
+
+			reconnTimer.Reset(reconnectionWindow)
+			select {
+			case conn = <-reconnCh:
+				reconnTimer.Stop()
+			case <-reconnTimer.C:
+				break loop
+			}
+		}
 	}
 
-	client.Destroy()
+	close(done)
 
 	cm.mu.Lock()
 	delete(cm.clients, sessionID)
 	cm.mu.Unlock()
+
+	client.Destroy()
 }
 
 type ClientInfo struct {
@@ -182,10 +219,10 @@ func NewClient(id int, sessionID uuid.UUID, lm *LobbyManager) *ClientSession {
 	}
 }
 
-func (c *ClientSession) Serve(conn *websocket.Conn) {
+func (c *ClientSession) Serve(conn *websocket.Conn) error {
 	if conn == nil {
 		slog.Error("cannot serve a nil websocket connection")
-		return
+		return errors.New("conn cannot be nil")
 	}
 	defer conn.Close()
 
@@ -211,7 +248,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 
 	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		slog.Error("failed to set read deadline", "clientID", c.info.Id, "error", err.Error())
-		return
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -247,7 +284,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 		for {
 			p, err := readTextMessage(conn)
 			if err != nil {
-				return
+				return err
 			}
 
 			c.info.Name, err = parseNameMessage(p)
@@ -264,7 +301,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) {
 	for {
 		p, err := readTextMessage(conn)
 		if err != nil {
-			break
+			return err
 		}
 
 		if err := c.handleInput(ctx, p); err != nil {
