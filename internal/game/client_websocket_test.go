@@ -32,7 +32,18 @@ func dialTestClient(t *testing.T, server *Server) *websocket.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
+	t.Cleanup(func() {
+		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				t.Fatal(err)
+			}
+		}
+		conn.Close()
+	})
+
+	if err := conn.WriteMessage(websocket.TextMessage, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	return conn
 }
