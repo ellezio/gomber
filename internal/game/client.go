@@ -140,9 +140,29 @@ loop:
 
 		select {
 		case newconn := <-reconnCh:
+			// This route is taken when client tries to reconnect but the server
+			// was not notified yet about dropped connection because of some
+			// network issues.
+			// This route also may take place when someone uses the same session
+			// token.
+			// This will drop an existing connection so to not cause
+			// constant reconnecting from client in case of using same
+			// session ID on both connection. This may be sign of compromised
+			// session ID which currently I don't know how to solve with maintaining
+			// ability to reconnect from some network issues.
+
 			conn.Close()
 			<-serverDone
 			conn = newconn
+
+			cm.mu.Lock()
+			cwrp := cm.clients[sessionID]
+			delete(cm.clients, sessionID)
+
+			sessionID = uuid.NewV4()
+			cwrp.session.sessionID = sessionID
+			cm.clients[sessionID] = cwrp
+			cm.mu.Unlock()
 
 		case err := <-serverDone:
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {

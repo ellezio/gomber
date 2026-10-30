@@ -43,45 +43,87 @@ class Client {
   lobbyListInterval: number;
   state: ClientState;
 
+  retryAttempt = 0;
+  maxRetries = 23; // equivalent of 1 minute
+  baseDelay = 200;
+  maxDelay = 3000;
+
   connect() {
     this.conn = new WebSocket(`ws://${location.host}/connectplayer`);
     this.conn.onmessage = this.handleMessage.bind(this);
     this.conn.onopen = () => {
-      const sid = localStorage.getItem("sid");
-      this.conn.send(sid ?? "");
+      this.retryAttempt = 0;
+      const sid = sessionStorage.getItem("sid");
+      this.send(sid ?? "");
+    };
+
+    this.conn.onclose = () => {
+      this.scheduleReconnect();
     };
   }
 
+  scheduleReconnect() {
+    if (this.retryAttempt < this.maxRetries) {
+      setTimeout(() => this.connect(), this.nextRetryDelay());
+    }
+  }
+
+  nextRetryDelay() {
+    const delay = Math.min(
+      this.baseDelay * Math.pow(this.retryAttempt, 2),
+      this.maxDelay,
+    );
+    this.retryAttempt++;
+    return Math.floor(delay);
+  }
+
+  send(msg: string) {
+    try {
+      // There also could be mechansim for resending unaccepted messages
+      // but for this simple game I don't care to do it. For now at least.
+      if (this.conn.readyState === WebSocket.OPEN) {
+        this.conn.send(msg);
+      } else {
+        console.error("sending on not opened websocket");
+      }
+    } catch (err) {
+      console.error(err);
+
+      // this will initiate reconnection as we want always have websocket connection available
+      this.conn.close();
+    }
+  }
+
   sendGameStart() {
-    this.conn.send("game:start");
+    this.send("game:start");
   }
 
   sendLobbyCreate(name: string) {
-    this.conn.send(`lobby:create:${name}`);
+    this.send(`lobby:create:${name}`);
   }
 
   sendLobbyConnect(id: number) {
-    this.conn.send(`lobby:connect:${id}`);
+    this.send(`lobby:connect:${id}`);
   }
 
   sendLobbyList() {
-    this.conn.send("lobby:list");
+    this.send("lobby:list");
   }
 
   sendClientName(name: string) {
-    this.conn.send(`name:${name}`);
+    this.send(`name:${name}`);
   }
 
   sendClientInput(netInput: networkInput) {
-    this.conn.send(JSON.stringify(netInput));
+    this.send(JSON.stringify(netInput));
   }
 
   sendSetMap(name: string) {
-    this.conn.send(`lobby:setMap:${name}`);
+    this.send(`lobby:setMap:${name}`);
   }
 
   sendLobbyLeave() {
-    this.conn.send("lobby:leave");
+    this.send("lobby:leave");
   }
 
   handleMessage(evt: MessageEvent<any>) {
@@ -108,7 +150,7 @@ class Client {
         this.handleGameSnapshot(msg.details);
         break;
       case "sessionInfo":
-        localStorage.setItem("sid", msg.details.sid);
+        sessionStorage.setItem("sid", msg.details.sid);
         // InLobby
         if (msg.details.state == 2) {
           // The lobbyState message may arriave before session info when reconnecting
