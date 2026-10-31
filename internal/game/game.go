@@ -480,6 +480,7 @@ func (g *Game) handleGameMessage(event GameMessage) {
 func (g *Game) reconnectClient(client *GameClient, event ClientConnectedEvent) {
 	client.notifier = event.Notifier
 	client.lastProcessedInputSeq = 0
+	client.isDisconnected = false
 }
 
 // handles client's id generation and instantiate player's entity
@@ -515,7 +516,6 @@ func (g *Game) addClient(details ClientConnectedEvent) {
 	}
 }
 
-// TODO: reconnecting
 func (g *Game) clientDisconnected(id int) {
 	g.clients[id].isDisconnected = true
 }

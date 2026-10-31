@@ -275,10 +275,11 @@ class Client {
 
     snackbarElement.appendChild(msg);
 
+    // NOTE:
+    // Errors not related to state JoiningLobby may still
+    // cause change in view.
+    //
     // TODO:
-    // This has erroneous logic because when receiving error
-    // which is not connected to joining lobby it will change
-    // state and view so lobby will be not shown.
     // To solve this I have to add some request ID to know
     // which one rised error.
     if (this.state == ClientState.JoiningLobby) {

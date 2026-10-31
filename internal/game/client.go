@@ -207,10 +207,6 @@ type ClientSession struct {
 	sessionID uuid.UUID
 	state     clientSessionState
 
-	// Those channels cannot be closed because some part of system may still
-	// use them to notify client until they got notified about client session
-	// being closed then they should unregister client notification mechanism
-	// after which the GC will clean the channels.
 	update           chan ClientMessage
 	updateBufferFull chan struct{}
 
@@ -376,13 +372,6 @@ func (c *ClientSession) serveUpdates(
 		case <-ctx.Done():
 			return nil
 		case <-c.updateBufferFull:
-			// TODO: reconnecting client
-			//
-			// This message is sent if buffered channel for updates is full
-			// which means that client is falling behind hence updates takes
-			// up resources. It's better to diconnect client and wait for
-			// eventual reconnection and send single new state update then
-			// bombarding the client with state update after falling behind to much.
 			return errors.New("update buffer is full")
 		case update := <-c.update:
 			// the clients updates should be chanded to client messages to be semantically corrent
