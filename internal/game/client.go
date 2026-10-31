@@ -203,6 +203,8 @@ const (
 )
 
 type ClientSession struct {
+	mu sync.Mutex
+
 	info      ClientInfo
 	sessionID uuid.UUID
 	state     clientSessionState
@@ -213,12 +215,6 @@ type ClientSession struct {
 	LobbyManager *LobbyManager
 	lobbyHandler *LobbyHandler
 
-	// TODO:
-	// This currently also lock the lobbyHandler which I don't want to
-	// I am leaving this for now but I have to think about some way to
-	// synchronously update ClientSession to not get into some nasy locking
-	// when it's not needed I might be easy deadlock by mistake
-	mu             sync.Mutex
 	latencyTracker map[int]time.Time
 	nextPingID     int
 }
@@ -287,7 +283,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) error {
 
 	c.mu.Lock()
 	if c.lobbyHandler != nil {
-		if err := c.joinToLobby(ctx, c.lobbyHandler.lobbyID); err != nil {
+		if err := c.joinToLobbyLocked(ctx, c.lobbyHandler.lobbyID); err != nil {
 			c.state = state_Logged
 			c.send(ctx, ErrorMessage{value: err.Error()})
 		}
@@ -527,7 +523,9 @@ func (c *ClientSession) handleLobbyCreate(ctx context.Context, crm *ClientRequst
 	nameStr := string(name)
 
 	lobbyID := c.LobbyManager.Create(nameStr)
-	if err := c.joinToLobby(ctx, lobbyID); err != nil {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.joinToLobbyLocked(ctx, lobbyID); err != nil {
 		slog.Error("failed to enter newly created lobby", "clientID", c.info.Id, "lobbyName", nameStr, "error", err)
 		if err = c.LobbyManager.Close(lobbyID, c.info.Id); err != nil {
 			slog.Error("failed to close lobby", "clientID", c.info.Id, "lobbyName", nameStr, "error", err)
@@ -558,7 +556,7 @@ func (c *ClientSession) handleLobbyConectMessage(ctx context.Context, crm *Clien
 		return errors.New("invalid lobby id")
 	}
 
-	if err := c.joinToLobby(ctx, lobbyID); err != nil {
+	if err := c.joinToLobbyLocked(ctx, lobbyID); err != nil {
 		return err
 	}
 
@@ -595,7 +593,7 @@ func (c *ClientSession) handleLobbyLeave() error {
 	return nil
 }
 
-func (c *ClientSession) joinToLobby(ctx context.Context, lobbyID int) error {
+func (c *ClientSession) joinToLobbyLocked(ctx context.Context, lobbyID int) error {
 	sendFn := c.createSendClientMessageFn(ctx)
 
 	handler, err := c.LobbyManager.Join(lobbyID, c.info, sendFn)
