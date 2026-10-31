@@ -11,6 +11,14 @@ const allViews = document.querySelectorAll(".view");
 
 const snackbarElement = document.getElementById("snackbar-block");
 
+enum SessionState {
+  Created,
+  Logged,
+  InLobby,
+}
+
+type sessionInfo = { sid: string; state: SessionState };
+
 type ServerMessage =
   | { type: "ok"; details: "name" }
   | { type: "lobbyList"; details: LobbyItem[] }
@@ -18,7 +26,7 @@ type ServerMessage =
   | { type: "gameStarted"; details: never }
   | { type: "snapshot"; details: gameUpdateMessage }
   | { type: "gameResult"; details: { winnerId: number } }
-  | { type: "sessionInfo"; details: { sid: string; state: number } }
+  | { type: "sessionInfo"; details: sessionInfo }
   | { type: "error"; details: string };
 
 type networkInput = {
@@ -150,25 +158,47 @@ class Client {
         this.handleGameSnapshot(msg.details);
         break;
       case "sessionInfo":
-        sessionStorage.setItem("sid", msg.details.sid);
-        // InLobby
-        if (msg.details.state == 2) {
-          // The lobbyState message may arriave before session info when reconnecting
-          if (this.lobby) {
-            if (this.lobby.state.state == ServerLobbyState.inLobby) {
-              this.showLobby();
-            } else if (this.lobby.state.state == ServerLobbyState.inGame) {
-              this.showGame();
-              this.startGame(false);
-            }
-          } else {
-            this.lobby ??= this.createLobby();
-            this.state = ClientState.InLobby;
-          }
-        }
+        this.handleSessionInfo(msg.details);
         break;
       case "error":
         this.handleErrorMessage(msg.details);
+        break;
+    }
+  }
+
+  handleSessionInfo(info: sessionInfo) {
+    sessionStorage.setItem("sid", info.sid);
+    switch (info.state) {
+      case SessionState.Created:
+        this.stopLobbyListInterval();
+        this.lobby = null;
+        if (this.game) this.game.destory();
+        else this.game = null;
+        this.showLoginPage();
+        break;
+
+      case SessionState.Logged:
+        this.lobby = null;
+        if (this.game) this.game.destory();
+        else this.game = null;
+        this.showLobbies();
+        break;
+
+      case SessionState.InLobby:
+        this.stopLobbyListInterval();
+
+        // The lobbyState message may arriave before session info when reconnecting
+        if (this.lobby) {
+          if (this.lobby.state.state == ServerLobbyState.inLobby) {
+            this.showLobby();
+          } else if (this.lobby.state.state == ServerLobbyState.inGame) {
+            this.showGame();
+            if (!this.game) this.startGame(false);
+          }
+        } else {
+          this.lobby ??= this.createLobby();
+          this.showLobby();
+        }
         break;
     }
   }

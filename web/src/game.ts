@@ -97,6 +97,10 @@ export class Game {
 
   onInput: (input: unprocessedInput) => void;
 
+  destory() {
+    clearInterval(this.updateInterval);
+  }
+
   async start() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -360,7 +364,7 @@ export class Game {
   }
 
   renderResult(winner: string) {
-    clearInterval(this.updateInterval);
+    this.destory();
 
     this.clear();
 
