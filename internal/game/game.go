@@ -202,21 +202,18 @@ func (g *Game) handleInput(dt float32) {
 			continue
 		}
 
-		// TODO: change user input processing from tick specific to handling individual input from clients with packet constraints
-		for ; input != nil; input = client.inputs.Pop() {
-			if input.Id <= client.lastProcessedInputSeq {
-				continue
-			}
-
-			if commands := g.inputHandler.HandleInput(input); commands != nil {
-				for _, command := range commands {
-					command(client.controlledEntity, min(dt, input.Dt))
-				}
-			}
-
-			client.processedInput = input
-			client.lastProcessedInputSeq = input.Id
+		if input.Id <= client.lastProcessedInputSeq {
+			continue
 		}
+
+		if commands := g.inputHandler.HandleInput(input); commands != nil {
+			for _, command := range commands {
+				command(client.controlledEntity, min(dt, input.Dt))
+			}
+		}
+
+		client.processedInput = input
+		client.lastProcessedInputSeq = input.Id
 	}
 }
 
