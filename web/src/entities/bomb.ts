@@ -1,7 +1,10 @@
 import { bombInMsg, Game } from "../game";
 import { TILE_SIZE } from "../gameMap";
 import { Entity, position, size } from "./entity";
-import { Explosion } from "./explosion";
+import { Explosion, ExplosionDirection } from "./explosion";
+
+const sprite = new Image(TILE_SIZE, TILE_SIZE);
+sprite.src = "/bomb.png";
 
 export class Bomb extends Entity {
   countDown: number;
@@ -36,22 +39,22 @@ export class Bomb extends Entity {
   render(ctx: CanvasRenderingContext2D, scale: number) {
     if (!this.active) return;
 
-    ctx.fillStyle = "white";
-    ctx.fillRect(
-      this.position.x * scale,
-      this.position.y * scale,
-      this.size.width * scale,
-      this.size.height * scale,
+    ctx.drawImage(
+      sprite,
+      this.position.x,
+      this.position.y,
+      this.size.width,
+      this.size.height,
     );
 
-    ctx.fillStyle = "black";
-    ctx.font = "48px serif";
+    ctx.fillStyle = "white";
+    ctx.font = "24px serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(
       this.countDown.toString(),
       this.position.x * scale + (this.size.width * scale) / 2,
-      this.position.y * scale + (this.size.height * scale) / 2,
+      this.position.y * scale + (this.size.height * scale) / 2 + 7,
     );
   }
 
@@ -132,14 +135,48 @@ export class Bomb extends Entity {
             y: this.position.y - dy * before * TILE_SIZE,
           },
           {
-            width: (1 + dx * (before + after)) * TILE_SIZE,
-            height: (1 + dy * (before + after)) * TILE_SIZE,
+            width: (1 + dx * before) * TILE_SIZE,
+            height: (1 + dy * before) * TILE_SIZE,
           },
-          "yellow",
           true,
+          dx == 0 ? ExplosionDirection.Up : ExplosionDirection.Left,
+        ),
+      );
+
+      this.game.instantiate(
+        new Explosion(
+          this.game,
+          0,
+          {
+            x: this.position.x + dx * TILE_SIZE,
+            y: this.position.y + dy * TILE_SIZE,
+          },
+          {
+            width: dx * after * TILE_SIZE,
+            height: dy * after * TILE_SIZE,
+          },
+          true,
+          dx == 0 ? ExplosionDirection.Down : ExplosionDirection.Right,
         ),
       );
     }
+
+    this.game.instantiate(
+      new Explosion(
+        this.game,
+        0,
+        {
+          x: this.position.x,
+          y: this.position.y,
+        },
+        {
+          width: TILE_SIZE,
+          height: TILE_SIZE,
+        },
+        true,
+        ExplosionDirection.Center,
+      ),
+    );
 
     this.active = false;
   }

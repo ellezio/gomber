@@ -1,5 +1,9 @@
 import { playerInMsg } from "../game";
+import { TILE_SIZE } from "../gameMap";
 import { Entity, position, size } from "./entity";
+
+const sprite = new Image(TILE_SIZE, TILE_SIZE);
+sprite.src = "/player.png";
 
 export class Player extends Entity {
   constructor(
@@ -62,9 +66,15 @@ export class Player extends Entity {
   }
 
   render(ctx: CanvasRenderingContext2D, scale: number): void {
-    super.render(ctx, scale);
-
     if (!this.active) return;
+
+    ctx.drawImage(
+      sprite,
+      this.position.x - TILE_SIZE / 2 + this.size.width / 2,
+      this.position.y + this.size.height - TILE_SIZE,
+      TILE_SIZE,
+      TILE_SIZE,
+    );
 
     ctx.fillStyle = "black";
     ctx.font = "24px serif";
@@ -73,7 +83,7 @@ export class Player extends Entity {
     ctx.fillText(
       this.name,
       this.size.width / 2 + this.position.x * scale,
-      this.position.y * scale,
+      (this.position.y + this.size.height - TILE_SIZE) * scale,
     );
   }
 }

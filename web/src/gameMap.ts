@@ -3,6 +3,15 @@ export type TileType = number;
 export const TILE_SIZE = 50;
 export const SCALE = 1;
 
+const wall = new Image(TILE_SIZE, TILE_SIZE);
+wall.src = "/wall.png";
+
+const destructibleWall = new Image(TILE_SIZE, TILE_SIZE);
+destructibleWall.src = "/destructible_wall.png";
+
+const floor = new Image(TILE_SIZE, TILE_SIZE);
+floor.src = "/floor.png";
+
 export class GameMap {
   grid: TileType[][];
 
@@ -27,16 +36,19 @@ export class GameMap {
     for (let y = 0; y < this.grid.length; y++) {
       for (let x = 0; x < this.grid[0].length; x++) {
         const tile = this.grid[y][x];
-        if (tile === 0) continue;
-
-        if (tile === 1) {
-          ctx.fillStyle = "gray";
-        } else if (tile === 2) {
-          ctx.fillStyle = "brown";
-        }
 
         const size = TILE_SIZE * SCALE;
-        ctx.fillRect(x * size, y * size, size, size);
+        switch (tile) {
+          case 0:
+            ctx.drawImage(floor, x * size, y * size, size, size);
+            break;
+          case 1:
+            ctx.drawImage(wall, x * size, y * size, size, size);
+            break;
+          case 2:
+            ctx.drawImage(destructibleWall, x * size, y * size, size, size);
+            break;
+        }
       }
     }
   }
