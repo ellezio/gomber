@@ -76,10 +76,19 @@ export class Player extends Entity {
       TILE_SIZE,
     );
 
-    ctx.fillStyle = "black";
-    ctx.font = "24px serif";
+    ctx.font = "18px Sans-serif";
+    ctx.strokeStyle = "black";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
+    ctx.lineWidth = 4;
+    ctx.miterLimit = 2;
+    ctx.strokeText(
+      this.name,
+      this.size.width / 2 + this.position.x * scale,
+      (this.position.y + this.size.height - TILE_SIZE) * scale,
+    );
+
+    ctx.fillStyle = "white";
     ctx.fillText(
       this.name,
       this.size.width / 2 + this.position.x * scale,
