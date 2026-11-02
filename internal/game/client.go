@@ -81,7 +81,7 @@ func NewClientManager() *ClientManager {
 	}
 }
 
-func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManager) {
+func (l *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManager) {
 	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 		fmt.Println(err)
 		conn.Close()
@@ -97,7 +97,7 @@ func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManag
 
 	if len(msg) > 0 {
 		sessionID, _ := uuid.Parse(string(msg))
-		clientWrp, ok := cm.getClient(sessionID)
+		clientWrp, ok := l.getClient(sessionID)
 
 		if ok {
 			select {
@@ -109,67 +109,67 @@ func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManag
 
 	}
 
-	cm.ServeClient(conn, lobbies)
+	l.ServeClient(conn, lobbies)
 }
 
-func (cm *ClientManager) addClient(client *ClientWrapper) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+func (l *ClientManager) addClient(client *ClientWrapper) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	cm.sessions[client.session.sessionID] = len(cm.clients)
-	cm.clients = append(cm.clients, client)
+	l.sessions[client.session.sessionID] = len(l.clients)
+	l.clients = append(l.clients, client)
 }
 
-func (cm *ClientManager) removeClient(sessionID uuid.UUID) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+func (l *ClientManager) removeClient(sessionID uuid.UUID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	idx := cm.sessions[sessionID]
-	delete(cm.sessions, sessionID)
+	idx := l.sessions[sessionID]
+	delete(l.sessions, sessionID)
 
-	copy(cm.clients[idx:], cm.clients[idx+1:])
-	cm.clients[len(cm.clients)-1] = nil
-	cm.clients = cm.clients[:len(cm.clients)-1]
+	copy(l.clients[idx:], l.clients[idx+1:])
+	l.clients[len(l.clients)-1] = nil
+	l.clients = l.clients[:len(l.clients)-1]
 }
 
-func (cm *ClientManager) getClient(sessionID uuid.UUID) (*ClientWrapper, bool) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+func (l *ClientManager) getClient(sessionID uuid.UUID) (*ClientWrapper, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	idx, ok := cm.sessions[sessionID]
+	idx, ok := l.sessions[sessionID]
 	if !ok {
 		return nil, false
 	}
 
-	client := cm.clients[idx]
+	client := l.clients[idx]
 	return client, true
 }
 
-func (cm *ClientManager) rotateSession(sessionID uuid.UUID) uuid.UUID {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+func (l *ClientManager) rotateSession(sessionID uuid.UUID) uuid.UUID {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	idx := cm.sessions[sessionID]
-	client := cm.clients[idx]
+	idx := l.sessions[sessionID]
+	client := l.clients[idx]
 
-	delete(cm.sessions, sessionID)
+	delete(l.sessions, sessionID)
 
 	newSessionID := uuid.NewV4()
-	cm.sessions[newSessionID] = idx
+	l.sessions[newSessionID] = idx
 	client.session.sessionID = newSessionID
 
 	return newSessionID
 }
 
-func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
-	clientID := int(cm.nextID.Add(1))
+func (l *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
+	clientID := int(l.nextID.Add(1))
 	sessionID := uuid.NewV4()
 	client := NewClient(clientID, sessionID, lobbies)
 	reconnCh := make(chan *websocket.Conn)
 	done := make(chan struct{})
 	clientWrp := &ClientWrapper{session: client, reconnCh: reconnCh, done: done}
 
-	cm.addClient(clientWrp)
+	l.addClient(clientWrp)
 
 	serverDone := make(chan error)
 
@@ -200,7 +200,7 @@ loop:
 			<-serverDone
 			conn = newconn
 
-			sessionID = cm.rotateSession(sessionID)
+			sessionID = l.rotateSession(sessionID)
 
 		case err := <-serverDone:
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
@@ -219,7 +219,7 @@ loop:
 
 	close(done)
 
-	cm.removeClient(sessionID)
+	l.removeClient(sessionID)
 
 	client.Destroy()
 }
