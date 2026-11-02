@@ -116,12 +116,15 @@ type Game struct {
 	over         bool
 
 	ch chan GameMessage
+
+	rand *rand.Rand
 }
 
 func NewGame() *Game {
 	game := &Game{
 		clients: make(map[int]*GameClient),
 		ch:      make(chan GameMessage, gameMessageQueueSize),
+		rand:    rand.New(rand.NewSource(time.Now().Unix())),
 	}
 
 	inputHandler := NewInputHandler(game)
@@ -414,15 +417,15 @@ func (g *Game) checkExplosionsCollision() {
 				var pu *PowerUp
 				puPos := math2.NewVector2(TileSize, TileSize).MulVector2(&tileVec)
 
-				r := rand.Intn(2)
+				r := rand.Intn(4)
 				switch r {
 				case 0:
 					pu = NewSpeedPowerUp(*puPos)
 				case 1:
 					pu = NewBombCapPowerUp(*puPos)
-				case 3:
+				case 2:
 					pu = NewExplosionRangePowerUp(*puPos)
-				case 4:
+				case 3:
 					pu = NewHpPowerUp(*puPos)
 				}
 

@@ -5,6 +5,7 @@ import "github.com/ellezio/gomber/internal/math2"
 type Entity struct {
 	Id       int           `json:"id"`
 	Tag      string        `json:"tag"`
+	Type     string        `json:"type"`
 	Pos      math2.Vector2 `json:"pos"`
 	Velocity math2.Vector2 `json:"-"`
 	AABB     math2.Box2    `json:"aabb"`

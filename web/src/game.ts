@@ -1,7 +1,7 @@
 import { GameMap, SCALE, TileType } from "./gameMap";
 import { CircularBuffer } from "./buffer";
 import { Bomb } from "./entities/bomb";
-import { Entity, powerUpFromMessage } from "./entities/entity";
+import { Entity } from "./entities/entity";
 import { Explosion } from "./entities/explosion";
 import { Player } from "./entities/player";
 import { HUD } from "./hud";
@@ -14,6 +14,7 @@ import {
 } from "./input";
 import { clients } from "./lobby";
 import { entityVsEntities, checkPlayerCollision } from "./collision";
+import { PowerUp } from "./entities/powerup";
 
 type entityInMsg = {
   id: number;
@@ -21,6 +22,7 @@ type entityInMsg = {
   aabb: { min: { x: number; y: number }; max: { x: number; y: number } };
   active: boolean;
   name: string;
+  type: string;
 };
 
 export type playerInMsg = entityInMsg & {
@@ -53,7 +55,7 @@ class GameState {
   players: Player[] = [];
   bombs: Bomb[] = [];
   explosions: Explosion[] = [];
-  powerups: Entity[] = [];
+  powerups: PowerUp[] = [];
 }
 
 export class Game {
@@ -279,8 +281,7 @@ export class Game {
         .forEach((b) => b.explode());
 
       this.state.powerups =
-        pstate.board.powerups?.map(powerUpFromMessage) ?? [];
-
+        pstate.board.powerups?.map((p) => PowerUp.fromMessage(p, this)) ?? [];
       if (this.gameMap.grid === undefined) {
         this.gameMap.setGrid(pstate.board.grid);
       } else {
