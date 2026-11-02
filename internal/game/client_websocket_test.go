@@ -203,7 +203,7 @@ func TestClientStateFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		client, ok := server.clients.clients[uuid.MustParse(sessionMsg.SessionID)]
+		client, ok := server.clients.getClient(uuid.MustParse(sessionMsg.SessionID))
 		if !ok {
 			t.Fatal("expected to get client")
 		}

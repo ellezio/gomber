@@ -69,14 +69,15 @@ type ClientWrapper struct {
 }
 
 type ClientManager struct {
-	mu      sync.Mutex
-	nextID  atomic.Int32
-	clients map[uuid.UUID]*ClientWrapper
+	mu       sync.Mutex
+	nextID   atomic.Int32
+	clients  []*ClientWrapper
+	sessions map[uuid.UUID]int
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients: make(map[uuid.UUID]*ClientWrapper),
+		sessions: make(map[uuid.UUID]int),
 	}
 }
 
@@ -96,10 +97,7 @@ func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManag
 
 	if len(msg) > 0 {
 		sessionID, _ := uuid.Parse(string(msg))
-
-		cm.mu.Lock()
-		clientWrp, ok := cm.clients[sessionID]
-		cm.mu.Unlock()
+		clientWrp, ok := cm.getClient(sessionID)
 
 		if ok {
 			select {
@@ -114,6 +112,55 @@ func (cm *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManag
 	cm.ServeClient(conn, lobbies)
 }
 
+func (cm *ClientManager) addClient(client *ClientWrapper) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.sessions[client.session.sessionID] = len(cm.clients)
+	cm.clients = append(cm.clients, client)
+}
+
+func (cm *ClientManager) removeClient(sessionID uuid.UUID) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	idx := cm.sessions[sessionID]
+	delete(cm.sessions, sessionID)
+
+	copy(cm.clients[idx:], cm.clients[idx+1:])
+	cm.clients[len(cm.clients)-1] = nil
+	cm.clients = cm.clients[:len(cm.clients)-1]
+}
+
+func (cm *ClientManager) getClient(sessionID uuid.UUID) (*ClientWrapper, bool) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	idx, ok := cm.sessions[sessionID]
+	if !ok {
+		return nil, false
+	}
+
+	client := cm.clients[idx]
+	return client, true
+}
+
+func (cm *ClientManager) rotateSession(sessionID uuid.UUID) uuid.UUID {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	idx := cm.sessions[sessionID]
+	client := cm.clients[idx]
+
+	delete(cm.sessions, sessionID)
+
+	newSessionID := uuid.NewV4()
+	cm.sessions[newSessionID] = idx
+	client.session.sessionID = newSessionID
+
+	return newSessionID
+}
+
 func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager) {
 	clientID := int(cm.nextID.Add(1))
 	sessionID := uuid.NewV4()
@@ -122,9 +169,7 @@ func (cm *ClientManager) ServeClient(conn *websocket.Conn, lobbies *LobbyManager
 	done := make(chan struct{})
 	clientWrp := &ClientWrapper{session: client, reconnCh: reconnCh, done: done}
 
-	cm.mu.Lock()
-	cm.clients[sessionID] = clientWrp
-	cm.mu.Unlock()
+	cm.addClient(clientWrp)
 
 	serverDone := make(chan error)
 
@@ -155,14 +200,7 @@ loop:
 			<-serverDone
 			conn = newconn
 
-			cm.mu.Lock()
-			cwrp := cm.clients[sessionID]
-			delete(cm.clients, sessionID)
-
-			sessionID = uuid.NewV4()
-			cwrp.session.sessionID = sessionID
-			cm.clients[sessionID] = cwrp
-			cm.mu.Unlock()
+			sessionID = cm.rotateSession(sessionID)
 
 		case err := <-serverDone:
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
@@ -181,9 +219,7 @@ loop:
 
 	close(done)
 
-	cm.mu.Lock()
-	delete(cm.clients, sessionID)
-	cm.mu.Unlock()
+	cm.removeClient(sessionID)
 
 	client.Destroy()
 }
