@@ -34,15 +34,16 @@ type ClientMessage interface {
 	iClientMessage()
 }
 
-func (GameStartedMessage) iClientMessage() {}
-func (ClientGameState) iClientMessage()    {}
-func (LobbyState) iClientMessage()         {}
-func (GameResult) iClientMessage()         {}
-func (NameMessage) iClientMessage()        {}
-func (ErrorMessage) iClientMessage()       {}
-func (LobbyClosed) iClientMessage()        {}
-func (Lobbies) iClientMessage()            {}
-func (SessionInfoMessage) iClientMessage() {}
+func (GameStartedMessage) iClientMessage()  {}
+func (ClientGameState) iClientMessage()     {}
+func (LobbyState) iClientMessage()          {}
+func (GameResult) iClientMessage()          {}
+func (NameMessage) iClientMessage()         {}
+func (ErrorMessage) iClientMessage()        {}
+func (LobbyClosed) iClientMessage()         {}
+func (Lobbies) iClientMessage()             {}
+func (SessionInfoMessage) iClientMessage()  {}
+func (PlayerKickedMessage) iClientMessage() {}
 
 type Lobbies []*LobbyInfo
 
@@ -74,6 +75,8 @@ type ClientManager struct {
 	clients  []*ClientWrapper
 	sessions map[uuid.UUID]int
 }
+
+type PlayerKickedMessage struct{}
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
@@ -406,8 +409,9 @@ func (c *ClientSession) serveUpdates(
 		case <-c.updateBufferFull:
 			return errors.New("update buffer is full")
 		case update := <-c.update:
-			// the clients updates should be chanded to client messages to be semantically corrent
-			if _, ok := update.(LobbyClosed); ok {
+			switch update.(type) {
+			default:
+			case LobbyClosed, PlayerKickedMessage:
 				c.mu.Lock()
 				c.lobbyHandler = nil
 				c.mu.Unlock()
@@ -539,6 +543,8 @@ func (c *ClientSession) handleLobbyMessage(ctx context.Context, crm *ClientRequs
 		return c.handleSetGameMap(crm)
 	case bytes.Equal(command, []byte("leave")):
 		return c.handleLobbyLeave()
+	case bytes.Equal(command, []byte("kick")):
+		return c.handleKick(crm)
 	default:
 		return errors.New("invalid lobby command")
 	}
@@ -625,6 +631,26 @@ func (c *ClientSession) handleLobbyLeave() error {
 	c.lobbyHandler = nil
 
 	c.state = state_Logged
+
+	return nil
+}
+
+func (c *ClientSession) handleKick(crm *ClientRequstMessage) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lobbyHandler == nil {
+		return errors.New("not in lobby")
+	}
+
+	playerID, err := strconv.Atoi(string(crm.Rest()))
+	if err != nil {
+		return errors.New("Invalid player identificator")
+	}
+
+	if err = c.lobbyHandler.Kick(playerID); err != nil {
+		return fmt.Errorf("Failed to kick player, reason: %v", err)
+	}
 
 	return nil
 }
@@ -781,6 +807,11 @@ func serializeMessage(clientMsg ClientMessage) ([]byte, error) {
 		msg = Message{
 			Type:    "sessionInfo",
 			Details: m,
+		}
+
+	case PlayerKickedMessage:
+		msg = Message{
+			Type: "kicked",
 		}
 
 	default:

@@ -24,6 +24,7 @@ func (ClientInpuMessage) iLobbyMessege()       {}
 func (UpdateClientMessage) iLobbyMessege()     {}
 func (CloseLobbyMessage) iLobbyMessege()       {}
 func (GameStartedMessage) iLobbyMessege()      {}
+func (KickPlayerMessage) iLobbyMessege()       {}
 
 type ConnectClientMessage struct {
 	info     ClientInfo
@@ -68,6 +69,11 @@ type LobbyResponse struct {
 
 type ClientInpuMessage struct {
 	ClientInputEvent
+}
+
+type KickPlayerMessage struct {
+	playerID int
+	response chan<- LobbyResponse
 }
 
 type LobbyInfo struct {
@@ -291,6 +297,9 @@ func (l *Lobby) Start() {
 
 func (l *Lobby) handleMessage(message LobbyMessege) bool {
 	switch msg := message.(type) {
+	default:
+		slog.Error("unexpected game.LobbyMessege", "message", msg)
+
 	case ConnectClientMessage:
 		err := l.connectClient(msg)
 		msg.response <- LobbyResponse{err: err}
@@ -331,8 +340,9 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 			return true
 		}
 
-	default:
-		slog.Error("unexpected game.LobbyMessege", "message", msg)
+	case KickPlayerMessage:
+		err := l.handleKickPlayer(msg.playerID)
+		msg.response <- LobbyResponse{err: err}
 	}
 
 	return false
@@ -390,6 +400,19 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 	return nil
 }
 
+func (l *Lobby) handleKickPlayer(playerID int) error {
+	client, ok := l.getClient(playerID)
+	if ok {
+		return errors.New("player not in this lobby")
+	}
+
+	l.removeClient(client.clientID)
+	ls := l.State()
+	l.broadcaseClientMessage(ls)
+
+	return nil
+}
+
 func (l *Lobby) addClient(client *LobbyClient) {
 	l.clientsIDs[client.clientID] = len(l.clients)
 	l.clients = append(l.clients, client)
@@ -406,7 +429,11 @@ func (l *Lobby) getClient(clientID int) (*LobbyClient, bool) {
 }
 
 func (l *Lobby) removeClient(clientID int) {
-	client, _ := l.getClient(clientID)
+	client, ok := l.getClient(clientID)
+	if !ok {
+		return
+	}
+
 	chooseAdmin := client.Admin
 
 	idx := l.clientsIDs[clientID]
@@ -597,4 +624,11 @@ func (lh *LobbyHandler) HandleInput(p []byte) {
 		Id:    lh.clientID,
 		Input: input,
 	}
+}
+
+func (lh *LobbyHandler) Kick(playerID int) error {
+	resch := make(chan LobbyResponse, 1)
+	msg := KickPlayerMessage{playerID: playerID, response: resch}
+	lh.lobbyCh <- msg
+	return (<-resch).err
 }
