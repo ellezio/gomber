@@ -50,6 +50,9 @@
 
 	--error-bg: var(--color-red-0);
 	--error-text: var(--color-fg-1);
+
+	--kick-btn-bg: var(--color-bg-4);
+	--kick-btn-fg: var(--color-red-1);
 }
 
 body {
@@ -177,8 +180,27 @@ button:focus {
 
 #lobby-view .lobby-client-list .list-item {
 	display: flex;
+	gap: 0.5rem;
+}
+
+#lobby-view .lobby-client-list .list-item .lobby-client-info {
+	display: flex;
+	flex: 1;
 	justify-content: space-between;
 	padding: 0.2rem 0.5rem;
+}
+
+#lobby-view .lobby-client-list .list-item button.kick {
+	padding: 0.2rem 0.5rem;
+	background-color: var(--kick-btn-bg);
+	color: var(--kick-btn-fg);
+	border: 1px solid var(--kick-btn-fg);
+	font-weight: 600;
+}
+
+#lobby-view .lobby-client-list .list-item button.kick:hover {
+	background-color: var(--kick-btn-fg);
+	color: var(--kick-btn-bg);
 }
 
 #lobby-view .lobby-client-list .admin .lobby-client-name {

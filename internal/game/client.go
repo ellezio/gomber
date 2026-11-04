@@ -58,6 +58,7 @@ type ErrorMessage struct {
 type SessionInfoMessage struct {
 	SessionID string             `json:"sid"`
 	State     clientSessionState `json:"state"`
+	ClientID  int                `json:"id"`
 }
 
 type LobbyClosed struct {
@@ -329,7 +330,7 @@ func (c *ClientSession) Serve(conn *websocket.Conn) error {
 	}
 	c.mu.Unlock()
 
-	c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String(), State: c.state})
+	c.send(ctx, SessionInfoMessage{SessionID: c.sessionID.String(), State: c.state, ClientID: c.info.Id})
 
 	if c.state == state_Created {
 		for {

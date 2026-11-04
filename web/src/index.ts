@@ -17,7 +17,7 @@ enum SessionState {
   InLobby,
 }
 
-type sessionInfo = { sid: string; state: SessionState };
+type sessionInfo = { sid: string; state: SessionState; id: number };
 
 type ServerMessage =
   | { type: "ok"; details: "name" }
@@ -27,6 +27,7 @@ type ServerMessage =
   | { type: "snapshot"; details: gameUpdateMessage }
   | { type: "gameResult"; details: { winnerId: number } }
   | { type: "sessionInfo"; details: sessionInfo }
+  | { type: "kicked"; details: never }
   | { type: "error"; details: string };
 
 type networkInput = {
@@ -50,6 +51,7 @@ class Client {
   lobbies: LobbyList;
   lobbyListInterval: number;
   state: ClientState;
+  myClientID: number;
 
   retryAttempt = 0;
   maxRetries = 23; // equivalent of 1 minute
@@ -134,6 +136,10 @@ class Client {
     this.send("lobby:leave");
   }
 
+  sendKickPlayer(playerID: number) {
+    this.send(`lobby:kick:${playerID}`);
+  }
+
   handleMessage(evt: MessageEvent<any>) {
     const msg: ServerMessage = JSON.parse(evt.data);
 
@@ -160,6 +166,9 @@ class Client {
       case "sessionInfo":
         this.handleSessionInfo(msg.details);
         break;
+      case "kicked":
+        this.handleKicked();
+        break;
       case "error":
         this.handleErrorMessage(msg.details);
         break;
@@ -168,6 +177,8 @@ class Client {
 
   handleSessionInfo(info: sessionInfo) {
     sessionStorage.setItem("sid", info.sid);
+    this.myClientID = info.id;
+
     switch (info.state) {
       case SessionState.Created:
         this.stopLobbyListInterval();
@@ -189,6 +200,8 @@ class Client {
 
         // The lobbyState message may arriave before session info when reconnecting
         if (this.lobby) {
+          this.lobby.setClientID(this.myClientID);
+
           if (this.lobby.state.state == ServerLobbyState.inLobby) {
             this.showLobby();
           } else if (this.lobby.state.state == ServerLobbyState.inGame) {
@@ -264,16 +277,19 @@ class Client {
     }
   }
 
+  handleKicked() {
+    if (this.game) {
+      this.game.destory();
+      this.game = null;
+    }
+
+    this.lobby = null;
+    this.showLobbies();
+    this.showErrorMessage("You have been kicked.");
+  }
+
   handleErrorMessage(message: string) {
-    const msg = document.createElement("div");
-    msg.classList.add("error-message");
-    msg.innerText = message;
-
-    setTimeout(() => {
-      msg.remove();
-    }, 8000);
-
-    snackbarElement.appendChild(msg);
+    this.showErrorMessage(message);
 
     // NOTE:
     // Errors not related to state JoiningLobby may still
@@ -287,11 +303,24 @@ class Client {
     }
   }
 
+  showErrorMessage(message: string) {
+    const msg = document.createElement("div");
+    msg.classList.add("error-message");
+    msg.innerText = message;
+
+    setTimeout(() => {
+      msg.remove();
+    }, 8000);
+
+    snackbarElement.appendChild(msg);
+  }
+
   createLobby(): Lobby {
-    const lobby = new Lobby(lobbyView);
+    const lobby = new Lobby(lobbyView, this.myClientID);
     lobby.onGameStart = () => this.startGame(true);
     lobby.onMapSelect = this.sendSetMap.bind(this);
     lobby.onLeave = this.leaveLobby.bind(this);
+    lobby.onKick = this.sendKickPlayer.bind(this);
     return lobby;
   }
 

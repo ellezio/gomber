@@ -402,13 +402,14 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 
 func (l *Lobby) handleKickPlayer(playerID int) error {
 	client, ok := l.getClient(playerID)
-	if ok {
+	if !ok {
 		return errors.New("player not in this lobby")
 	}
 
 	l.removeClient(client.clientID)
 	ls := l.State()
 	l.broadcaseClientMessage(ls)
+	client.sendFn(PlayerKickedMessage{})
 
 	return nil
 }

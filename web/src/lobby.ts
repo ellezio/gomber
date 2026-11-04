@@ -22,16 +22,35 @@ export type lobbyState = {
 export class Lobby {
   root: HTMLElement;
   state: lobbyState;
+  isAdmin: boolean;
+  myClientID: number;
   onGameStart: () => void;
   onMapSelect: (mapName: string) => void;
   onLeave: () => void;
+  onKick: (playerID: number) => void;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, myClientID: number) {
     this.root = root;
+    this.myClientID = myClientID;
+  }
+
+  setClientID(clientID: number) {
+    this.myClientID = clientID;
+    this.updateAdmin();
+  }
+
+  private updateAdmin() {
+    for (const client of this.state.clients) {
+      if (client.id == this.myClientID && client.admin) {
+        this.isAdmin = true;
+        break;
+      }
+    }
   }
 
   update(state: lobbyState) {
     this.state = state;
+    this.updateAdmin();
   }
 
   render() {
@@ -77,7 +96,14 @@ export class Lobby {
       if (client.admin) {
         c.classList.add("admin");
       }
-      c.innerHTML = `<span class="lobby-client-name">${client.name}</span> <span>${client.latency} ms</span>`;
+      c.innerHTML = `<div class="lobby-client-info"><span class="lobby-client-name">${client.name}</span> <span>${client.latency} ms</span></div>`;
+      if (this.isAdmin && !client.admin) {
+        const btn = document.createElement("button");
+        btn.classList = "kick";
+        btn.innerText = "Kick";
+        btn.onclick = () => this.onKick(client.id);
+        c.appendChild(btn);
+      }
       clients.push(c);
     }
     clientList.replaceChildren(...clients);
