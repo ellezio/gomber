@@ -71,17 +71,16 @@ type ClientWrapper struct {
 }
 
 type ClientManager struct {
-	mu       sync.Mutex
-	nextID   atomic.Int32
-	clients  []*ClientWrapper
-	sessions map[uuid.UUID]int
+	mu      sync.Mutex
+	nextID  atomic.Int32
+	clients map[uuid.UUID]*ClientWrapper
 }
 
 type PlayerKickedMessage struct{}
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		sessions: make(map[uuid.UUID]int),
+		clients: make(map[uuid.UUID]*ClientWrapper),
 	}
 }
 
@@ -119,47 +118,31 @@ func (l *ClientManager) ConnectClient(conn *websocket.Conn, lobbies *LobbyManage
 func (l *ClientManager) addClient(client *ClientWrapper) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	l.sessions[client.session.sessionID] = len(l.clients)
-	l.clients = append(l.clients, client)
+	l.clients[client.session.sessionID] = client
 }
 
 func (l *ClientManager) removeClient(sessionID uuid.UUID) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	idx := l.sessions[sessionID]
-	delete(l.sessions, sessionID)
-
-	copy(l.clients[idx:], l.clients[idx+1:])
-	l.clients[len(l.clients)-1] = nil
-	l.clients = l.clients[:len(l.clients)-1]
+	delete(l.clients, sessionID)
 }
 
 func (l *ClientManager) getClient(sessionID uuid.UUID) (*ClientWrapper, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	idx, ok := l.sessions[sessionID]
-	if !ok {
-		return nil, false
-	}
-
-	client := l.clients[idx]
-	return client, true
+	client, ok := l.clients[sessionID]
+	return client, ok
 }
 
 func (l *ClientManager) rotateSession(sessionID uuid.UUID) uuid.UUID {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	idx := l.sessions[sessionID]
-	client := l.clients[idx]
-
-	delete(l.sessions, sessionID)
+	client := l.clients[sessionID]
+	delete(l.clients, sessionID)
 
 	newSessionID := uuid.NewV4()
-	l.sessions[newSessionID] = idx
+	l.clients[newSessionID] = client
 	client.session.sessionID = newSessionID
 
 	return newSessionID
