@@ -229,7 +229,7 @@ func (g *Game) update(dt float32) {
 		}
 	}
 
-	if live <= 0 {
+	if live <= 1 {
 		g.over = true
 	}
 

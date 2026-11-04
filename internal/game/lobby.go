@@ -477,6 +477,10 @@ func (l *Lobby) runGame(clientId int) error {
 		return errors.New("lobby just closed")
 	}
 
+	if len(l.clients) < 2 {
+		return errors.New("at least two players required")
+	}
+
 	client, ok, _ := l.getClient(clientId)
 	if !ok {
 		return errors.New("not in lobby")
