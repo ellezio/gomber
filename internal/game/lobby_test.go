@@ -112,9 +112,9 @@ func TestLobbyAdminTransferAndStartRejections(t *testing.T) {
 	join(2)
 	join(3)
 
-	client1, _ := lobby.getClient(1)
-	client2, _ := lobby.getClient(2)
-	client3, _ := lobby.getClient(3)
+	client1, _, _ := lobby.getClient(1)
+	client2, _, _ := lobby.getClient(2)
+	client3, _, _ := lobby.getClient(3)
 
 	if !client1.Admin || client2.Admin || client3.Admin {
 		t.Fatal("first member should be the only admin")

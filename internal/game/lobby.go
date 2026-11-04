@@ -245,9 +245,8 @@ const (
 )
 
 type Lobby struct {
-	name       string
-	clients    []*LobbyClient
-	clientsIDs map[int]int
+	name    string
+	clients []*LobbyClient
 
 	gameMaps    *GameMapManager
 	gameMapName string
@@ -260,11 +259,10 @@ type Lobby struct {
 
 func NewLobby(name string, gameMaps *GameMapManager) *Lobby {
 	lobby := &Lobby{
-		name:       name,
-		clientsIDs: make(map[int]int),
-		ch:         make(chan LobbyMessege, messageQueueSize),
-		done:       make(chan struct{}),
-		gameMaps:   gameMaps,
+		name:     name,
+		ch:       make(chan LobbyMessege, messageQueueSize),
+		done:     make(chan struct{}),
+		gameMaps: gameMaps,
 	}
 
 	names := gameMaps.GetMapsName()
@@ -351,7 +349,7 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 func (l *Lobby) updateClient(msg UpdateClientMessage) {
 	// Just ignore if client is not found because client has to
 	// join to lobby to be able to send this message.
-	if client, ok := l.getClient(msg.clientID); ok {
+	if client, ok, _ := l.getClient(msg.clientID); ok {
 		client.latency = msg.latency
 	}
 
@@ -360,7 +358,7 @@ func (l *Lobby) updateClient(msg UpdateClientMessage) {
 }
 
 func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
-	if client, ok := l.getClient(connClientMsg.info.Id); ok {
+	if client, ok, _ := l.getClient(connClientMsg.info.Id); ok {
 		if l.state.Load() == state_closing {
 			return errors.New("cannot join, lobby just closed")
 		}
@@ -401,7 +399,7 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 }
 
 func (l *Lobby) handleKickPlayer(playerID int) error {
-	client, ok := l.getClient(playerID)
+	client, ok, _ := l.getClient(playerID)
 	if !ok {
 		return errors.New("player not in this lobby")
 	}
@@ -415,30 +413,26 @@ func (l *Lobby) handleKickPlayer(playerID int) error {
 }
 
 func (l *Lobby) addClient(client *LobbyClient) {
-	l.clientsIDs[client.clientID] = len(l.clients)
 	l.clients = append(l.clients, client)
 }
 
-func (l *Lobby) getClient(clientID int) (*LobbyClient, bool) {
-	idx, ok := l.clientsIDs[clientID]
-	if !ok {
-		return nil, false
+func (l *Lobby) getClient(clientID int) (*LobbyClient, bool, int) {
+	for idx, client := range l.clients {
+		if client.clientID == clientID {
+			return client, true, idx
+		}
 	}
 
-	client := l.clients[idx]
-	return client, true
+	return nil, false, 0
 }
 
 func (l *Lobby) removeClient(clientID int) {
-	client, ok := l.getClient(clientID)
+	client, ok, idx := l.getClient(clientID)
 	if !ok {
 		return
 	}
 
 	chooseAdmin := client.Admin
-
-	idx := l.clientsIDs[clientID]
-	delete(l.clientsIDs, clientID)
 
 	copy(l.clients[idx:], l.clients[idx+1:])
 	l.clients[len(l.clients)-1] = nil
@@ -461,7 +455,7 @@ func (l *Lobby) removeClient(clientID int) {
 }
 
 func (l *Lobby) setMap(clientID int, mapName string) error {
-	client, ok := l.getClient(clientID)
+	client, ok, _ := l.getClient(clientID)
 	if !ok {
 		return errors.New("not in lobby")
 	}
@@ -483,7 +477,7 @@ func (l *Lobby) runGame(clientId int) error {
 		return errors.New("lobby just closed")
 	}
 
-	client, ok := l.getClient(clientId)
+	client, ok, _ := l.getClient(clientId)
 	if !ok {
 		return errors.New("not in lobby")
 	}
@@ -547,7 +541,7 @@ func (l *Lobby) handleClientInput(inp ClientInputEvent) {
 
 func (l *Lobby) close(clientID int) error {
 	if len(l.clients) != 0 {
-		client, ok := l.getClient(clientID)
+		client, ok, _ := l.getClient(clientID)
 		if !ok {
 			return errors.New("client not in lobby")
 		}
