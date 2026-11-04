@@ -81,6 +81,13 @@ func (gmm *GameMapManager) Get(mapName string) (*GameMap, bool) {
 	return gameMap.Clone(), ok
 }
 
+func (gmm *GameMapManager) GetMapCapacity(mapName string) (int, bool) {
+	if gameMap, ok := gmm.gameMaps[mapName]; ok {
+		return len(gameMap.PlayerSpawns), true
+	}
+	return 0, false
+}
+
 func (gmm *GameMapManager) GetMapsName() []string {
 	return slices.SortedFunc(maps.Keys(gmm.gameMaps), func(s1, s2 string) int { return strings.Compare(s1, s2) })
 }

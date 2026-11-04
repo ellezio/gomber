@@ -15,6 +15,7 @@ export type lobbyState = {
   name: string;
   clients: clients;
   gameMaps: string[];
+  mapCap: number;
   currentMap: string;
   state: ServerLobbyState;
 };
@@ -67,7 +68,7 @@ export class Lobby {
 
     info.innerHTML = `
       <div>${this.state.name} - ${this.state.currentMap}</div>
-      <div>${this.state.clients?.length ?? 0} / [map cap]</div>
+      <div>${this.state.clients?.length ?? 0} / ${this.state.mapCap}</div>
     `;
 
     const oldMapSelect = document.getElementById(

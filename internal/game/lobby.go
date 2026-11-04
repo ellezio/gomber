@@ -231,6 +231,7 @@ type LobbyState struct {
 	Clients    []LobbyClientInfo `json:"clients"`
 	GameMaps   []string          `json:"gameMaps"`
 	CurrentMap string            `json:"currentMap"`
+	MapCap     int               `json:"mapCap"`
 	State      int32             `json:"state"`
 }
 
@@ -252,6 +253,7 @@ type Lobby struct {
 	gameMapName string
 	gameCh      chan<- GameMessage
 	state       atomic.Int32
+	playerCap   int
 
 	ch   chan LobbyMessege
 	done chan struct{}
@@ -267,7 +269,7 @@ func NewLobby(name string, gameMaps *GameMapManager) *Lobby {
 
 	names := gameMaps.GetMapsName()
 	if len(names) > 0 {
-		lobby.gameMapName = names[0]
+		lobby.setMap(names[0])
 	}
 
 	return lobby
@@ -314,7 +316,7 @@ func (l *Lobby) handleMessage(message LobbyMessege) bool {
 		msg.response <- LobbyResponse{err: err}
 
 	case SetMapMessage:
-		err := l.setMap(msg.clientID, msg.mapName)
+		err := l.handleSetMap(msg.clientID, msg.mapName)
 		msg.response <- LobbyResponse{err: err}
 
 	case GameStartedMessage:
@@ -359,6 +361,8 @@ func (l *Lobby) updateClient(msg UpdateClientMessage) {
 
 func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 	if client, ok, _ := l.getClient(connClientMsg.info.Id); ok {
+		// this is reconnect flow
+
 		if l.state.Load() == state_closing {
 			return errors.New("cannot join, lobby just closed")
 		}
@@ -371,6 +375,10 @@ func (l *Lobby) connectClient(connClientMsg ConnectClientMessage) error {
 			l.gameCh <- ClientConnectedEvent{ClientId: client.clientID, Notifier: client, Name: client.name}
 		}
 	} else {
+		if len(l.clients) >= l.playerCap {
+			return errors.New("lobby is full")
+		}
+
 		switch l.state.Load() {
 		case state_inGame:
 			return errors.New("cannot join, game is running")
@@ -454,7 +462,7 @@ func (l *Lobby) removeClient(clientID int) {
 	}
 }
 
-func (l *Lobby) setMap(clientID int, mapName string) error {
+func (l *Lobby) handleSetMap(clientID int, mapName string) error {
 	client, ok, _ := l.getClient(clientID)
 	if !ok {
 		return errors.New("not in lobby")
@@ -462,6 +470,16 @@ func (l *Lobby) setMap(clientID int, mapName string) error {
 
 	if !client.Admin {
 		return errors.New("only admin can set game map")
+	}
+
+	return l.setMap(mapName)
+}
+
+func (l *Lobby) setMap(mapName string) error {
+	var ok bool
+	l.playerCap, ok = l.gameMaps.GetMapCapacity(mapName)
+	if !ok {
+		return errors.New("map not exist")
 	}
 
 	l.gameMapName = mapName
@@ -479,6 +497,10 @@ func (l *Lobby) runGame(clientId int) error {
 
 	if len(l.clients) < 2 {
 		return errors.New("at least two players required")
+	}
+
+	if len(l.clients) > l.playerCap {
+		return errors.New("too much players, map capacity has been exceeded")
 	}
 
 	client, ok, _ := l.getClient(clientId)
@@ -527,6 +549,7 @@ func (l *Lobby) State() LobbyState {
 
 	ls.GameMaps = l.gameMaps.GetMapsName()
 	ls.CurrentMap = l.gameMapName
+	ls.MapCap = l.playerCap
 
 	return ls
 }
