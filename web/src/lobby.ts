@@ -111,5 +111,9 @@ export class Lobby {
 
     leaveBtn.onclick = this.onLeave;
     startGameBtn.onclick = this.onGameStart;
+
+    if (!this.isAdmin) {
+      rightPane.classList.toggle("hidden", true);
+    }
   }
 }
