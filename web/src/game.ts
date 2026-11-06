@@ -42,11 +42,12 @@ export type powerUpInMsg = entityInMsg;
 export type gameUpdateMessage = {
   controlledEntityId: number;
   processedInput: { id: number; actions: Action[]; dt: number };
-  board: {
+  state: {
     grid: TileType[][];
     players: playerInMsg[];
     bombs: bombInMsg[];
     powerups: powerUpInMsg[];
+    timer: number;
   };
 };
 
@@ -56,6 +57,7 @@ class GameState {
   bombs: Bomb[] = [];
   explosions: Explosion[] = [];
   powerups: PowerUp[] = [];
+  timer: number;
 }
 
 export class Game {
@@ -223,6 +225,8 @@ export class Game {
       hp: this.state.player.hp,
       bombsCount: this.state.player.availableBombs,
     });
+
+    this.hud.updateTimer(this.state.timer);
   }
 
   private render() {
@@ -253,11 +257,13 @@ export class Game {
     if (this.pendingServerState) {
       const pstate = this.pendingServerState;
 
+      this.state.timer = pstate.state.timer;
+
       this.state.players = this.state.players.filter((p) =>
-        pstate.board.players.find((bp) => p.id == bp.id),
+        pstate.state.players.find((bp) => p.id == bp.id),
       );
 
-      for (const player of pstate.board.players) {
+      for (const player of pstate.state.players) {
         if (player.id == pstate.controlledEntityId) continue;
 
         const existingPlayer = this.state.players.find(
@@ -270,7 +276,7 @@ export class Game {
         }
       }
 
-      for (const bomb of pstate.board.bombs ?? []) {
+      for (const bomb of pstate.state.bombs ?? []) {
         const exists = this.state.bombs.find((b) => b.id == bomb.id);
         if (!exists) {
           this.state.bombs.push(Bomb.fromMessage(bomb, this));
@@ -278,18 +284,18 @@ export class Game {
       }
 
       this.state.bombs
-        .filter((b) => !pstate.board.bombs.find((bb) => bb.id == b.id))
+        .filter((b) => !pstate.state.bombs.find((bb) => bb.id == b.id))
         .forEach((b) => b.explode());
 
       this.state.powerups =
-        pstate.board.powerups?.map((p) => PowerUp.fromMessage(p, this)) ?? [];
+        pstate.state.powerups?.map((p) => PowerUp.fromMessage(p, this)) ?? [];
       if (this.gameMap.grid === undefined) {
-        this.gameMap.setGrid(pstate.board.grid);
+        this.gameMap.setGrid(pstate.state.grid);
       } else {
-        this.gameMap.updateGrid(pstate.board.grid);
+        this.gameMap.updateGrid(pstate.state.grid);
       }
 
-      for (const player of pstate.board.players) {
+      for (const player of pstate.state.players) {
         if (player.id === pstate.controlledEntityId) {
           if (this.state.player === undefined) {
             this.state.player = Player.fromMessage(player);

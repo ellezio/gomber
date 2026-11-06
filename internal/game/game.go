@@ -41,7 +41,7 @@ func (ClientDisconnectedEvent) iGameMessage() {}
 // Each client receives state with information that are trimmed for them.
 type ClientGameState struct {
 	ControlledEntityId int       `json:"controlledEntityId"`
-	GameState          GameState `json:"board"`
+	GameState          GameState `json:"state"`
 	ProcessedInput     *Input    `json:"processedInput"`
 }
 
@@ -88,6 +88,9 @@ type GameState struct {
 	Explosions []*Explosion
 	PowerUps   []*PowerUp `json:"powerups"`
 
+	Timer    int `json:"timer"`
+	timerAcc float64
+
 	bombGrid [][]int
 }
 
@@ -125,6 +128,7 @@ func NewGame() *Game {
 		clients: make(map[int]*GameClient),
 		ch:      make(chan GameMessage, gameMessageQueueSize),
 		rand:    rand.New(rand.NewSource(time.Now().Unix())),
+		Timer:   300,
 	}
 
 	inputHandler := NewInputHandler(game)
@@ -242,6 +246,14 @@ func (g *Game) update(dt float32) {
 	for _, bomb := range g.Bombs {
 		if bomb.Active {
 			bomb.Update(dt)
+		}
+	}
+
+	if g.Timer > 0 {
+		g.timerAcc += float64(dt)
+		if g.timerAcc > 1 {
+			g.Timer -= int(g.timerAcc)
+			g.timerAcc -= float64(int(g.timerAcc))
 		}
 	}
 }

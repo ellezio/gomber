@@ -19,6 +19,8 @@ export class HUD {
   private playerStats: playerStatsHUD = { hp: 0, bombsCount: 0 };
   private playerStatsPosition = { x: 0, y: 0, w: 0, h: 80 };
 
+  private timer: number;
+
   updateResolution(width: number, height: number) {
     this.width = width;
     this.height = height;
@@ -34,6 +36,10 @@ export class HUD {
 
   updatePlayerStats(stats: playerStatsHUD) {
     this.playerStats = stats;
+  }
+
+  updateTimer(v: number) {
+    this.timer = v;
   }
 
   render(ctx: CanvasRenderingContext2D) {
@@ -85,5 +91,16 @@ export class HUD {
     ctx.textAlign = "left";
     ctx.textBaseline = "bottom";
     ctx.fillText(`${this.playerStats.bombsCount} Bombs`, 500, 48);
+
+    ctx.fillStyle = "black";
+    ctx.font = "48px serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+
+    const timer =
+      this.timer == undefined
+        ? "0:00"
+        : `${Math.floor(this.timer / 60)}:${("0" + (this.timer % 60)).slice(-2)}`;
+    ctx.fillText(timer, 200, 48);
   }
 }
