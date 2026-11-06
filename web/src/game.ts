@@ -259,6 +259,12 @@ export class Game {
 
       this.state.timer = pstate.state.timer;
 
+      if (this.gameMap.grid === undefined) {
+        this.gameMap.setGrid(pstate.state.grid);
+      } else {
+        this.gameMap.updateGrid(pstate.state.grid);
+      }
+
       this.state.players = this.state.players.filter((p) =>
         pstate.state.players.find((bp) => p.id == bp.id),
       );
@@ -289,11 +295,6 @@ export class Game {
 
       this.state.powerups =
         pstate.state.powerups?.map((p) => PowerUp.fromMessage(p, this)) ?? [];
-      if (this.gameMap.grid === undefined) {
-        this.gameMap.setGrid(pstate.state.grid);
-      } else {
-        this.gameMap.updateGrid(pstate.state.grid);
-      }
 
       for (const player of pstate.state.players) {
         if (player.id === pstate.controlledEntityId) {

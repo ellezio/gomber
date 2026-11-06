@@ -42,10 +42,16 @@ func (b *Bomb) Update(dt float32) {
 	}
 }
 
-func (b *Bomb) explode() {
+func (b *Bomb) Destory() {
 	if b.spawnedBy != nil {
 		b.spawnedBy.AvailableBombs += 1
 	}
+	b.game.bombGrid[int(b.Pos.Y/TileSize)][int(b.Pos.X/TileSize)] = 0
+	b.game.Destruct(&b.Entity)
+}
+
+func (b *Bomb) explode() {
+	b.Destory()
 
 	x, y := int(b.Pos.X/TileSize), int(b.Pos.Y/TileSize)
 	explosion := NewExplosion(
@@ -93,9 +99,6 @@ func (b *Bomb) explode() {
 	}
 
 	b.game.Instantiate(explosion)
-
-	b.game.bombGrid[int(b.Pos.Y/TileSize)][int(b.Pos.X/TileSize)] = 0
-	b.game.Destruct(&b.Entity)
 }
 
 func (b *Bomb) OnCollision(entity *Entity) {

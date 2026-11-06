@@ -111,6 +111,7 @@ type Game struct {
 	GameState
 
 	playerSpawns []SpawnPoint
+	shrinkTiles  []mapTile
 
 	clients      map[int]*GameClient
 	inputHandler *InputHandler
@@ -128,7 +129,7 @@ func NewGame() *Game {
 		clients: make(map[int]*GameClient),
 		ch:      make(chan GameMessage, gameMessageQueueSize),
 		rand:    rand.New(rand.NewSource(time.Now().Unix())),
-		Timer:   300,
+		Timer:   150,
 	}
 
 	inputHandler := NewInputHandler(game)
@@ -225,14 +226,20 @@ func (g *Game) handleInput(dt float32) {
 }
 
 func (g *Game) update(dt float32) {
-	live := 0
 	for _, player := range g.Players {
 		if player.Active {
-			live++
 			player.Update(dt)
 		}
 	}
 
+	g.updateTimer(dt)
+
+	live := 0
+	for _, player := range g.Players {
+		if player.Active {
+			live++
+		}
+	}
 	if live <= 1 {
 		g.over = true
 	}
@@ -248,12 +255,52 @@ func (g *Game) update(dt float32) {
 			bomb.Update(dt)
 		}
 	}
+}
 
-	if g.Timer > 0 {
-		g.timerAcc += float64(dt)
-		if g.timerAcc > 1 {
-			g.Timer -= int(g.timerAcc)
-			g.timerAcc -= float64(int(g.timerAcc))
+func (g *Game) updateTimer(dt float32) {
+	g.timerAcc += float64(dt)
+	for g.timerAcc >= 1 {
+		g.timerAcc--
+		if g.Timer > 0 {
+			g.Timer--
+		}
+		if g.Timer == 0 {
+			g.shrinkMap()
+		}
+	}
+}
+
+func (g *Game) shrinkMap() {
+	if len(g.shrinkTiles) == 0 {
+		return
+	}
+	tile := g.shrinkTiles[0]
+	g.shrinkTiles = g.shrinkTiles[1:]
+	g.BoardGrid[tile.y][tile.x] = Tile_Wall
+
+	wall := math2.NewBox2(
+		math2.NewVector2(float32(tile.x*TileSize), float32(tile.y*TileSize)),
+		math2.NewVector2(float32((tile.x+1)*TileSize), float32((tile.y+1)*TileSize)),
+	)
+
+	overlaps := func(entity *Entity) bool {
+		return entity.Active && wall.Overlap(entity.AABB.Clone().AddVector2(&entity.Pos))
+	}
+
+	for _, player := range g.Players {
+		if overlaps(&player.Entity) {
+			player.HP = 0
+			player.Active = false
+		}
+	}
+	for _, bomb := range g.Bombs {
+		if overlaps(&bomb.Entity) {
+			bomb.Destory()
+		}
+	}
+	for _, powerUp := range g.PowerUps {
+		if overlaps(&powerUp.Entity) {
+			g.Destruct(&powerUp.Entity)
 		}
 	}
 }
@@ -608,6 +655,7 @@ func (g *Game) generateEntityId() int {
 
 func (g *Game) LoadMap(gameMap *GameMap) {
 	g.BoardGrid = gameMap.Grid
+	g.shrinkTiles = prepareShrinkPattern(g.BoardGrid)
 
 	l := len(g.BoardGrid[0])
 	bombSlice := make([]int, len(g.BoardGrid)*l)
@@ -620,4 +668,45 @@ func (g *Game) LoadMap(gameMap *GameMap) {
 		spawnPoint := SpawnPoint{spawn, nil}
 		g.playerSpawns = append(g.playerSpawns, spawnPoint)
 	}
+}
+
+type mapTile struct {
+	x, y int
+}
+
+func prepareShrinkPattern(grid [][]TileType) []mapTile {
+	var tiles []mapTile
+	if len(grid) == 0 {
+		return tiles
+	}
+	add := func(x, y int) {
+		if grid[y][x] != Tile_Wall {
+			tiles = append(tiles, mapTile{x, y})
+		}
+	}
+
+	left, top, right, bottom := 0, 0, len(grid[0])-1, len(grid)-1
+	for left <= right && top <= bottom {
+		for x := left; x <= right; x++ {
+			add(x, top)
+		}
+		top++
+		for y := top; y <= bottom; y++ {
+			add(right, y)
+		}
+		right--
+		if top <= bottom {
+			for x := right; x >= left; x-- {
+				add(x, bottom)
+			}
+			bottom--
+		}
+		if left <= right {
+			for y := bottom; y >= top; y-- {
+				add(left, y)
+			}
+			left++
+		}
+	}
+	return tiles
 }

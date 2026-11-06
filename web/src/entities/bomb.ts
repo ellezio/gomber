@@ -87,6 +87,11 @@ export class Bomb extends Entity {
     const x = Math.floor(this.position.x / TILE_SIZE);
     const y = Math.floor(this.position.y / TILE_SIZE);
 
+    if (grid[y]?.[x] === 1) {
+      this.active = false;
+      return;
+    }
+
     const reach = (dx: number, dy: number): number => {
       let distance = 0;
       for (let i = 1; i <= this.explosionRange; i++) {
