@@ -226,6 +226,7 @@ export class Game {
   }
 
   private render() {
+    this.ctx.imageSmoothingEnabled = false;
     this.clear();
 
     const offX = Math.round(this.canvas.width / 2 - this.gameMap.width / 2);
