@@ -27,9 +27,10 @@ func TestLobbyLifetime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		gmaps := NewGameMapManager()
 		lm := NewLobbyManager(gmaps)
-		lobbyID := lm.Create("hybydyż")
 		firstUpdates := make(chan ClientMessage, 8)
 		secondUpdates := make(chan ClientMessage, 8)
+
+		_, lobbyID := createTestLobby(t, "hybydyż", lm)
 
 		if _, err := lm.Join(lobbyID+1, ClientInfo{Id: 1}, func(ClientMessage) {}); err == nil {
 			t.Fatal("joining a nonexistent lobby should fail")
@@ -99,8 +100,7 @@ func TestLobbyLifetime(t *testing.T) {
 }
 
 func TestLobbyAdminTransferAndStartRejections(t *testing.T) {
-	gmaps := NewGameMapManager()
-	lobby := NewLobby("test", gmaps)
+	lobby, _ := createTestLobby(t, "test", nil)
 	join := func(id int) {
 		t.Helper()
 		msg := ConnectClientMessage{info: ClientInfo{Id: id}, sendFn: func(ClientMessage) {}}

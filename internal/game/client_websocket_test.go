@@ -48,6 +48,23 @@ func dialTestClient(t *testing.T, server *Server) *websocket.Conn {
 	return conn
 }
 
+func createTestLobby(t *testing.T, name string, lm *LobbyManager) (*Lobby, int) {
+	t.Helper()
+	var lobby *Lobby
+	var lobbyID int
+	if lm != nil {
+		lobbyID := lm.Create(name)
+		lobby = lm.lobbies[lobbyID].lobby
+		t.Cleanup(func() { lm.Close(lobbyID, 0) })
+	} else {
+		gmaps := NewGameMapManager()
+		lobby = NewLobby(name, gmaps)
+		lobbyID = 0
+	}
+	lobby.playerCap = 4
+	return lobby, lobbyID
+}
+
 func readServerMessage(t *testing.T, conn *websocket.Conn) (string, json.RawMessage) {
 	t.Helper()
 	var msg struct {
@@ -74,8 +91,7 @@ func TestWebSocketNameHandshakeAndLobbyJoin(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		lobbyID := server.lobbies.Create("test")
-		lobby := server.lobbies.lobbies[lobbyID].lobby
+		lobby, lobbyID := createTestLobby(t, "test", server.lobbies)
 
 		msgType, details = readServerMessage(t, conn)
 		if msgType != "ok" || string(details) != `"name"` {

@@ -442,7 +442,9 @@ func (l *Lobby) removeClient(clientID int) {
 
 	chooseAdmin := client.Admin
 
-	copy(l.clients[idx:], l.clients[idx+1:])
+	if len(l.clients) > 1 {
+		copy(l.clients[idx:], l.clients[idx+1:])
+	}
 	l.clients[len(l.clients)-1] = nil
 	l.clients = l.clients[:len(l.clients)-1]
 
